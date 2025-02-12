@@ -2,38 +2,46 @@ package net.nashat
 
 import kotlin.random.Random
 
-fun interface ReceiveNodeSelector {
-    fun selectReceivingNode(msg: PotuzMessage, sender: PotuzNode): PotuzNode?
+interface ReceiveNodeSelector {
+
+    fun selectReceivingNodeCandidates(sender: AbstractNode): List<AbstractNode>
+
+    fun onReceiverSelected(receiver: AbstractNode, sender: AbstractNode)
 }
 
 fun interface ReceiveNodeSelectorStrategy {
     fun createNodeSelector(): ReceiveNodeSelector
 
     companion object {
-        fun createRandom(allNodes: List<PotuzNode>, rnd: Random): ReceiveNodeSelectorStrategy =
+        fun createRandom(allNodes: List<AbstractNode>, rnd: Random): ReceiveNodeSelectorStrategy =
             ReceiveNodeSelectorStrategy {
-                ReceiveNodeSelector { msg, sender ->
-                    (allNodes - sender).random(rnd)
+                object : ReceiveNodeSelector {
+                    override fun selectReceivingNodeCandidates(sender: AbstractNode): List<AbstractNode> = allNodes - sender
+                    override fun onReceiverSelected(receiver: AbstractNode, sender: AbstractNode) {}
                 }
             }
 
-        fun createRandomSingleReceiveMessage(allNodes: List<PotuzNode>, rnd: Random): ReceiveNodeSelectorStrategy =
+        fun createRandomSingleReceiveMessage(allNodes: List<AbstractNode>, rnd: Random): ReceiveNodeSelectorStrategy =
             ReceiveNodeSelectorStrategy {
-                val receivingNodes = mutableSetOf<PotuzNode>()
-                ReceiveNodeSelector { msg, sender ->
-                    (allNodes - sender - receivingNodes).randomOrNull(rnd)?.also {
-                        receivingNodes += it
+                val receivingNodes = mutableSetOf<AbstractNode>()
+                object : ReceiveNodeSelector {
+                    override fun selectReceivingNodeCandidates(sender: AbstractNode): List<AbstractNode> = allNodes - sender - receivingNodes
+                    override fun onReceiverSelected(receiver: AbstractNode, sender: AbstractNode) {
+                        receivingNodes += receiver
                     }
                 }
             }
 
-        fun createRandomNotReady(allNodes: List<PotuzNode>, rnd: Random): ReceiveNodeSelectorStrategy =
+        fun createNetworkSingleReceiveMessage(allNodes: List<AbstractNode>, network: RandomNetwork): ReceiveNodeSelectorStrategy =
             ReceiveNodeSelectorStrategy {
-                val receivingNodes = mutableSetOf<PotuzNode>()
-                ReceiveNodeSelector { msg, sender ->
-                    val nonReadyNodes = allNodes.filter { !it.isRecovered() }
-                    (nonReadyNodes - sender - receivingNodes).randomOrNull(rnd)?.also {
-                        receivingNodes += it
+                val nodeToIndex = allNodes.indices.associateBy { allNodes[it] }
+                val receivingNodes = mutableSetOf<AbstractNode>()
+                fun nodePeers(node: AbstractNode) = network.connections[nodeToIndex[node]]!!.map { allNodes[it] }
+                object : ReceiveNodeSelector {
+                    override fun selectReceivingNodeCandidates(sender: AbstractNode): List<AbstractNode> =
+                        nodePeers(sender) - receivingNodes
+                    override fun onReceiverSelected(receiver: AbstractNode, sender: AbstractNode) {
+                        receivingNodes += receiver
                     }
                 }
             }

@@ -65,7 +65,7 @@ operator fun CoefMatrix.plus(vector: CoefVector) =
     if (isEmpty()) {
         CoefMatrix(Matrix(arrayOf(vector.vec)))
     } else {
-        CoefMatrix(coefMatrix.insertRow(coefMatrix.rows, vector.vec))
+        CoefMatrix(coefMatrix.insertRow(coefMatrix.rows + 1, vector.vec))
     }
 
 fun CoefMatrix.doesIncreaseRank(newVector: CoefVector) = this.rank < (this + newVector).rank

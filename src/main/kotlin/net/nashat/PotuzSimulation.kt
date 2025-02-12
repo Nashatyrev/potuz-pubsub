@@ -1,48 +1,155 @@
 package net.nashat
 
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import org.jetbrains.kotlinx.dataframe.DataFrame
+import org.jetbrains.kotlinx.dataframe.annotations.DataSchema
+import org.jetbrains.kotlinx.dataframe.api.columnOf
+import org.jetbrains.kotlinx.dataframe.api.convert
+import org.jetbrains.kotlinx.dataframe.api.dataFrameOf
+import org.jetbrains.kotlinx.dataframe.api.named
+import org.jetbrains.kotlinx.dataframe.api.print
+import org.jetbrains.kotlinx.dataframe.api.toDataFrame
+import org.jetbrains.kotlinx.dataframe.api.with
+import org.jetbrains.kotlinx.dataframe.io.*
 import kotlin.random.Random
 
 fun main() {
+
     val startT = System.currentTimeMillis()
-    for (seed in 0..0) {
-        PotuzSimulation(
-            isPartialExtensionSupported = false,
-            pPrime = PRIME_2_IN_8_PLUS_1,
-            rnd = Random(seed),
-        ).run()
+
+    val configs: List<PotuzSimulationConfig> =
+        listOf(
+            2,
+            6,
+            10,
+            20,
+            40,
+            100
+        ).flatMap { peerCount ->
+            listOf(
+                1,
+                2,
+                4,
+                10,
+                20,
+                40,
+                100
+            ).flatMap { chunkCount ->
+                listOf(
+                    ErasureParams.RS(1, false),
+                    ErasureParams.RS(1, true),
+                    ErasureParams.RS(2, false),
+                    ErasureParams.RS(2, true),
+                    ErasureParams.RS(3, true),
+                    ErasureParams.RLNC(),
+                ).map { erasureParams ->
+                    PotuzParams(chunkCount, erasureParams)
+                }
+            }.map { potuzParams ->
+                PotuzSimulationConfig(
+                    potuzParams,
+                    nodeCount = 1000,
+                    peerCount = peerCount,
+                    isGodStopMode = true
+                )
+            }
+        }
+
+    val jsonPretty = Json {
+        prettyPrint = true
+        encodeDefaults = true
     }
+
+    val jsonFile = Json {
+        prettyPrint = false
+        encodeDefaults = true
+    }
+
+    val results = configs
+        .parallelStream()
+        .map { config -> config to PotuzSimulation(config).run() }
+        .toList()
+        .toMap()
+
+
+    results.forEach { (config, result) ->
+        println(jsonPretty.encodeToString(config))
+        result.print(rowsLimit = Int.MAX_VALUE)
+        println()
+    }
+
+    PotuzIO().writeResultsToJson("./result.json", results.keys, results.values)
+
     println("Completed in ${System.currentTimeMillis() - startT} ms")
 }
 
-class PotuzSimulation(
-    val numberOfChunks: Int = 20,
-    val isPartialExtensionSupported: Boolean = true,
+@Serializable
+@DataSchema
+data class PotuzSimulationConfig(
+    val params: PotuzParams,
     val nodeCount: Int = 1000,
-    val pPrime: String = PRIME_2_IN_63_PLUS_O,
-    val rnd: Random = Random(6)
+    val peerCount: Int,
+    val isGodStopMode: Boolean,
+    val randomSeed: Long = 0,
+)
+
+@DataSchema
+data class CoreResult(
+    val doneNodeCnt: Int,
+    val activeNodeCnt: Int,
+    val totalMsgCnt: Int,
+    val dupMsgCnt: Int,
+    val dupBeforeDone: Int,
+    val dupOneConn: Int,
+)
+
+class PotuzSimulation(
+    val config: PotuzSimulationConfig
 ) {
 
-    init {
-        setFieldPrime(pPrime)
-    }
+    val nodes: List<AbstractNode>
+    val network: RandomNetwork
+    val nodeSelectorStrategy: ReceiveNodeSelectorStrategy
+    val rnd = Random(config.randomSeed)
 
-    val cappedPPrime = try { pPrime.toLong() } catch (e: Exception) { Int.MAX_VALUE.toLong() }
-    val params: PotuzParams = PotuzParams(numberOfChunks, isPartialExtensionSupported, cappedPPrime - 1, cappedPPrime - 1)
+    init {
+        setFieldPrime(config.params.pPrime)
+        when (config.params.erasureParams) {
+            is ErasureParams.RLNC -> {
+
+                nodes = List(config.nodeCount) { index -> PotuzNode(index, rnd, config.params) }
+                network = RandomNetwork(config.nodeCount, config.peerCount, rnd)
+                nodeSelectorStrategy = ReceiveNodeSelectorStrategy.createNetworkSingleReceiveMessage(nodes, network)
+            }
+
+            is ErasureParams.RS -> {
+                val extendedChunksCount = config.params.numberOfChunks * config.params.erasureParams.extensionFactor
+                val chunkMeshes =
+                    if (config.params.erasureParams.isDistinctMeshesPerChunk)
+                        List(extendedChunksCount) { RandomNetwork(config.nodeCount, config.peerCount, rnd) }
+                    else {
+                        val singleMesh = RandomNetwork(config.nodeCount, config.peerCount, rnd)
+                        List(extendedChunksCount) { singleMesh }
+                    }
+
+                nodes = List(config.nodeCount) { index -> RsNode(index, rnd, config.params, chunkMeshes) }
+                network = RandomNetwork.createAllToAll(config.nodeCount)
+                nodeSelectorStrategy = ReceiveNodeSelectorStrategy.createRandomSingleReceiveMessage(nodes, rnd)
+            }
+        }
+
+        nodes.first().makePublisher()
+    }
 
     var round = 0
-    val nodes = List(nodeCount) { index ->
-        PotuzNode(index, rnd, params)
-    }.also {
-        it.first().makePublisher()
-    }
-    val nodeSelectorStrategy: ReceiveNodeSelectorStrategy =
-        ReceiveNodeSelectorStrategy.createRandomSingleReceiveMessage(nodes, rnd)
 
-    fun nextRound() {
-        val receivers = nodes.toMutableSet()
-        val messages = nodes.map {
-            it.generateNewMessage(receivers)?.also { msg ->
-                receivers -= msg.to
+    fun nextRound(): Int {
+        val nodeSelector = nodeSelectorStrategy.createNodeSelector()
+        val messages = nodes.shuffled(rnd).map { sender ->
+            val receiverCandidates = nodeSelector.selectReceivingNodeCandidates(sender)
+            sender.generateNewMessage(receiverCandidates)?.also { msg ->
+                nodeSelector.onReceiverSelected(msg.to, msg.from)
             }
         }
         for (idx in messages.indices) {
@@ -53,6 +160,9 @@ class PotuzSimulation(
             }
         }
         round++
+        val msgCount = messages.count { it != null }
+        return msgCount
+
     }
 
     fun maxTreeNodes() =
@@ -65,23 +175,55 @@ class PotuzSimulation(
     val duplicateMessagesBeforeRecover get() = allMessages.filter { !it.isNew && !it.isRecovered }
     val duplicateMessageCount get() = allMessages.count { !it.isNew }
     val duplicateMessageBeforeRecoverCount get() = allMessages.count { !it.isNew && !it.isRecovered }
+    val messagesByConnection
+        get() = allMessages
+            .groupBy { setOf(it.msg.from, it.msg.to) }
+    val duplicateOneConnectionMessages
+        get() = allMessages
+            .groupBy { setOf(it.msg.from, it.msg.to) to it.msg.coefs }
+            .filter { (_, messages) ->
+                if (messages.size > 2) {
+                    throw IllegalStateException()
+                }
+                messages.size > 1
+            }
+    val allMessagesByPeer
+        get() =
+            allMessages
+                .filter { it.msg.descriptor.originalVectorId == 1 }
+                .flatMap { listOf(it.msg.to to it, it.msg.from to it) }
+                .groupBy { it.first }
+                .mapValues { (_, value) -> value.map { it.second } }
     val receivedNodeCount get() = nodes.count { it.isRecovered() }
     val activeNodeCount get() = nodes.count { it.isActive() }
     val totalChunksCount get() = nodes.sumOf { it.getChunksCount() }
-    val targetTotalChunksCount = nodeCount * params.numberOfChunks
-    val allReceived get() = receivedNodeCount == nodeCount
+    val targetTotalChunksCount = config.nodeCount * config.params.numberOfChunks
+    val allReceived get() = receivedNodeCount == config.nodeCount
 
-    fun run() {
-        println("Heey!!!")
+    fun run(): DataFrame<CoreResult> {
+        val rows = mutableListOf<CoreResult>()
 
-        while (!allReceived) {
-            nextRound()
-            val readyPercents = totalChunksCount * 100 / targetTotalChunksCount
-            val relativeHop = round.toDouble() / numberOfChunks
-            val relativeHopS = String.format("%.2f", relativeHop)
-            println("$round:\t$relativeHopS\t$receivedNodeCount\t$activeNodeCount\t$readyPercents%\t$totalMessageCount\t$duplicateMessageCount\t$duplicateMessageBeforeRecoverCount")
+        while (true) {
+            if (config.isGodStopMode && allReceived) break
+
+            val messageCount = nextRound()
+
+            if (messageCount == 0) {
+                break
+            }
+
+            rows += CoreResult(
+                receivedNodeCount,
+                activeNodeCount,
+                totalMessageCount,
+                duplicateMessageCount,
+                duplicateMessageBeforeRecoverCount,
+                duplicateOneConnectionMessages.size
+            )
         }
 
-        println("Done!")
+        val dataFrame = rows.toDataFrame()
+
+        return dataFrame
     }
 }

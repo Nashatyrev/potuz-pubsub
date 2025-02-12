@@ -3,8 +3,8 @@ package net.nashat
 data class PotuzMessage(
     val coefs: CoefVector,
     val descriptor: CoefVectorDescriptor,
-    val from: PotuzNode,
-    val to: PotuzNode
+    val from: AbstractNode,
+    val to: AbstractNode
 )
 
 data class CoefVectorDescriptor(val coefs: CoefVector, val sourceVectors: List<CoefVectorDescriptor>, val originalVectorId: Int?) {
