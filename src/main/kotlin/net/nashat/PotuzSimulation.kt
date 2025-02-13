@@ -1,5 +1,6 @@
 package net.nashat
 
+import com.sun.org.apache.xpath.internal.functions.FuncRound
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import org.jetbrains.kotlinx.dataframe.DataFrame
@@ -14,7 +15,7 @@ import org.jetbrains.kotlinx.dataframe.api.with
 import org.jetbrains.kotlinx.dataframe.io.*
 import kotlin.random.Random
 
-fun main() {
+fun main1() {
 
     val startT = System.currentTimeMillis()
 
@@ -79,6 +80,16 @@ fun main() {
     println("Completed in ${System.currentTimeMillis() - startT} ms")
 }
 
+fun main() {
+    val cfg = PotuzSimulationConfig(
+        params = PotuzParams(100, rsParams = RSParams(1, false)),
+        peerCount = 20,
+        isGodStopMode = true
+    )
+
+    PotuzSimulation(cfg, logEveryRound = true).run()
+}
+
 @Serializable
 @DataSchema
 data class PotuzSimulationConfig(
@@ -100,7 +111,8 @@ data class CoreResult(
 )
 
 class PotuzSimulation(
-    val config: PotuzSimulationConfig
+    val config: PotuzSimulationConfig,
+    val logEveryRound: Boolean = false
 ) {
 
     val nodes: List<AbstractNode>
@@ -132,6 +144,7 @@ class PotuzSimulation(
                 network = RandomNetwork.createAllToAll(config.nodeCount)
                 nodeSelectorStrategy = ReceiveNodeSelectorStrategy.createRandomSingleReceiveMessage(nodes, rnd)
             }
+
             else -> throw NotImplementedError()
         }
 
@@ -174,8 +187,11 @@ class PotuzSimulation(
     val messagesByConnection
         get() = allMessages
             .groupBy { setOf(it.msg.from, it.msg.to) }
-    val duplicateOneConnectionMessages
-        get() = allMessages
+
+    fun getAllMessagesForRound(round: Int) =
+        nodes.flatMap { it.receivedMessages.filter { it.hop == round } }
+    fun getDuplicateOneConnectionMessagesForRound(round: Int) =
+        getAllMessagesForRound(round)
             .groupBy { setOf(it.msg.from, it.msg.to) to it.msg.coefs }
             .filter { (_, messages) ->
                 if (messages.size > 2) {
@@ -199,6 +215,7 @@ class PotuzSimulation(
     fun run(): DataFrame<CoreResult> {
         val rows = mutableListOf<CoreResult>()
 
+        var duplicateOneConnectionMessagesAccum = 0
         while (true) {
             if (config.isGodStopMode && allReceived) break
 
@@ -208,14 +225,22 @@ class PotuzSimulation(
                 break
             }
 
+            duplicateOneConnectionMessagesAccum += getDuplicateOneConnectionMessagesForRound(round - 1).size
+
             rows += CoreResult(
                 receivedNodeCount,
                 activeNodeCount,
                 totalMessageCount,
                 duplicateMessageCount,
                 duplicateMessageBeforeRecoverCount,
-                duplicateOneConnectionMessages.size
+                duplicateOneConnectionMessagesAccum
             )
+
+            if (logEveryRound) {
+                val totalNonDupRequired = (nodes.size - 1) * config.params.numberOfChunks
+                val nonDupDone = totalMessageCount - duplicateMessageCount
+                println("$round: $nonDupDone/$totalNonDupRequired, ${rows.last()}")
+            }
         }
 
         val dataFrame = rows.toDataFrame()

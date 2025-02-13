@@ -44,17 +44,19 @@ abstract class AbstractNode(
         val isNew: Boolean
 
         if (!isRecovered()) {
-            val newMatrix = currentMartix + msg.coefs
-            isNew = newMatrix.rank > currentMartix.rank
-            if (isNew) {
-                currentMartix = newMatrix
-                coefDescriptors += msg.descriptor
+            if (msg.coefs !in currentMartix.coefVectors) {
+                val newMatrix = currentMartix + msg.coefs
+                isNew = newMatrix.rank > currentMartix.rank
+                if (isNew) {
+                    currentMartix = newMatrix
+                    coefDescriptors += msg.descriptor
+
+                    if (isRecovered()) {
+                        handleRecovered()
+                    }
+                }
             } else {
-                // place for breakpoint here
-                doNothing()
-            }
-            if (isRecovered()) {
-                handleRecovered()
+                isNew = false
             }
         } else {
             isNew = false
