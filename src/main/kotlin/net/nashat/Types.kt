@@ -52,6 +52,7 @@ data class CoefMatrix(val coefMatrix: Matrix<FieldP>, val origVectors: List<Coef
 
     val rank by lazy { coefMatrix.rank() }
     val coefVectors by lazy { origVectors ?: allRows().map { CoefVector(it) } }
+    val coefVectorsSet by lazy { coefVectors.toSet() }
 }
 
 operator fun CoefVector.times(m: Long) =

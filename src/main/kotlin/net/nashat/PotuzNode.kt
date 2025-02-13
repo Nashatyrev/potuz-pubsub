@@ -22,7 +22,7 @@ class PotuzNode(index: Int, rnd: Random, params: PotuzParams) : AbstractNode(ind
             0 -> return null
 
             1 -> // no sense to multiply a single vector
-                currentMartix.coefVectors[0]
+                currentMartix.coefVectors.first()
 
             params.numberOfChunks -> // we recover original data and may generate a chunk with any random coefs
             {

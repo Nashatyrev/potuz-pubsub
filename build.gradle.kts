@@ -9,8 +9,8 @@ group = "net.nashat"
 version = "1.0"
 
 repositories {
-    mavenLocal()
     mavenCentral()
+    mavenLocal()
 }
 
 dependencies {

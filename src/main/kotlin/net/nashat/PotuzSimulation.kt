@@ -15,34 +15,34 @@ import org.jetbrains.kotlinx.dataframe.api.with
 import org.jetbrains.kotlinx.dataframe.io.*
 import kotlin.random.Random
 
-fun main1() {
+fun main() {
 
     val startT = System.currentTimeMillis()
 
     val configs: List<PotuzSimulationConfig> =
         listOf(
-            2,
-            6,
+//            2,
+//            6,
             10,
             20,
-            40,
-            100
+//            40,
+//            100
         ).flatMap { peerCount ->
             listOf(
-                1,
-                2,
-                4,
+//                1,
+//                2,
+//                4,
                 10,
                 20,
-                40,
-                100
+//                40,
+//                100
             ).flatMap { chunkCount ->
                 listOf(
                     RSParams(1, false),
                     RSParams(1, true),
                     RSParams(2, false),
                     RSParams(2, true),
-                    RSParams(3, true),
+//                    RSParams(3, true),
                     RLNCParams(),
                 ).map { erasureParams ->
                     PotuzParams.create(chunkCount, erasureParams)
@@ -80,7 +80,7 @@ fun main1() {
     println("Completed in ${System.currentTimeMillis() - startT} ms")
 }
 
-fun main() {
+fun mainTest() {
     val cfg = PotuzSimulationConfig(
         params = PotuzParams(100, rsParams = RSParams(1, false)),
         peerCount = 20,

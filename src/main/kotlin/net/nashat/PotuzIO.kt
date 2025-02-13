@@ -18,11 +18,21 @@ class PotuzIO {
         encodeDefaults = true
     }
 
-    fun writeResultsToJson(file: String, configs: Collection<PotuzSimulationConfig>, results: Collection<DataFrame<CoreResult>>) {
-        writeResultsToJson(File(file).writer(), configs, results)
+    fun writeResultsToJson(
+        file: String,
+        configs: Collection<PotuzSimulationConfig>,
+        results: Collection<DataFrame<CoreResult>>
+    ) {
+        File(file).writer().use { writer ->
+            writeResultsToJson(writer, configs, results)
+        }
     }
 
-    fun writeResultsToJson(out: Appendable, configs: Collection<PotuzSimulationConfig>, results: Collection<DataFrame<CoreResult>>) {
+    fun writeResultsToJson(
+        out: Appendable,
+        configs: Collection<PotuzSimulationConfig>,
+        results: Collection<DataFrame<CoreResult>>
+    ) {
         require(configs.size == results.size)
 
         val configColumn = columnOf(*configs.toTypedArray()).named("config")
@@ -35,7 +45,9 @@ class PotuzIO {
     }
 
     fun readResultsFromJson(file: String): DataFrame<Any?> =
-        readResultsFromJson(File(file).inputStream())
+        File(file).inputStream().use { input ->
+            readResultsFromJson(input)
+        }
 
 
     fun readResultsFromJson(input: InputStream): DataFrame<Any?> {

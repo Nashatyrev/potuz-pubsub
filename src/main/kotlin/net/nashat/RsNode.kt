@@ -53,7 +53,7 @@ class RsNode(index: Int, rnd: Random, params: PotuzParams, chunkMeshes: List<Ran
                 .sortedBy { seenVectorsByPeer[it]?.rowCount ?: 0 }
 
             val maybeReceiver = receiveCandidates.firstOrNull { receiver ->
-                !(seenVectorsByPeer[receiver]?.coefVectors?.contains(existingVector) ?: false)
+                !(seenVectorsByPeer[receiver]?.coefVectorsSet?.contains(existingVector) ?: false)
             }
             if (maybeReceiver != null) {
                 val msg =
