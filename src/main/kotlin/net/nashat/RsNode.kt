@@ -6,12 +6,13 @@ class RsNode(index: Int, rnd: Random, params: PotuzParams, chunkMeshes: List<Ran
     AbstractNode(index, rnd, params) {
 
 
-    val rsParams = params.erasureParams as ErasureParams.RS
+    val rsParams = params.rsParams!!
     val numberOfExtendedChunks = params.numberOfChunks * rsParams.extensionFactor
     val chunkMeshes = chunkMeshes.map { it.connections[index]!! }
 
     init {
         require(chunkMeshes.size == numberOfExtendedChunks)
+        require(params.rsParams != null)
     }
 
     override fun makePublisher() {

@@ -37,14 +37,14 @@ fun main() {
                 100
             ).flatMap { chunkCount ->
                 listOf(
-                    ErasureParams.RS(1, false),
-                    ErasureParams.RS(1, true),
-                    ErasureParams.RS(2, false),
-                    ErasureParams.RS(2, true),
-                    ErasureParams.RS(3, true),
-                    ErasureParams.RLNC(),
+                    RSParams(1, false),
+                    RSParams(1, true),
+                    RSParams(2, false),
+                    RSParams(2, true),
+                    RSParams(3, true),
+                    RLNCParams(),
                 ).map { erasureParams ->
-                    PotuzParams(chunkCount, erasureParams)
+                    PotuzParams.create(chunkCount, erasureParams)
                 }
             }.map { potuzParams ->
                 PotuzSimulationConfig(
@@ -58,11 +58,6 @@ fun main() {
 
     val jsonPretty = Json {
         prettyPrint = true
-        encodeDefaults = true
-    }
-
-    val jsonFile = Json {
-        prettyPrint = false
         encodeDefaults = true
     }
 
@@ -115,18 +110,18 @@ class PotuzSimulation(
 
     init {
         setFieldPrime(config.params.pPrime)
-        when (config.params.erasureParams) {
-            is ErasureParams.RLNC -> {
+        when {
+            config.params.rlncParams != null -> {
 
                 nodes = List(config.nodeCount) { index -> PotuzNode(index, rnd, config.params) }
                 network = RandomNetwork(config.nodeCount, config.peerCount, rnd)
                 nodeSelectorStrategy = ReceiveNodeSelectorStrategy.createNetworkSingleReceiveMessage(nodes, network)
             }
 
-            is ErasureParams.RS -> {
-                val extendedChunksCount = config.params.numberOfChunks * config.params.erasureParams.extensionFactor
+            config.params.rsParams != null -> {
+                val extendedChunksCount = config.params.numberOfChunks * config.params.rsParams.extensionFactor
                 val chunkMeshes =
-                    if (config.params.erasureParams.isDistinctMeshesPerChunk)
+                    if (config.params.rsParams.isDistinctMeshesPerChunk)
                         List(extendedChunksCount) { RandomNetwork(config.nodeCount, config.peerCount, rnd) }
                     else {
                         val singleMesh = RandomNetwork(config.nodeCount, config.peerCount, rnd)
@@ -137,6 +132,7 @@ class PotuzSimulation(
                 network = RandomNetwork.createAllToAll(config.nodeCount)
                 nodeSelectorStrategy = ReceiveNodeSelectorStrategy.createRandomSingleReceiveMessage(nodes, rnd)
             }
+            else -> throw NotImplementedError()
         }
 
         nodes.first().makePublisher()
