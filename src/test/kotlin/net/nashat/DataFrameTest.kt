@@ -5,13 +5,10 @@
 
 package net.nashat
 
-import org.jetbrains.kotlinx.dataframe.DataFrame
-import org.jetbrains.kotlinx.dataframe.DataRow
 import org.jetbrains.kotlinx.dataframe.annotations.DataSchema
 import org.jetbrains.kotlinx.dataframe.annotations.ImportDataSchema
 import org.jetbrains.kotlinx.dataframe.api.JoinType
 import org.jetbrains.kotlinx.dataframe.api.add
-import org.jetbrains.kotlinx.dataframe.api.by
 import org.jetbrains.kotlinx.dataframe.api.cast
 import org.jetbrains.kotlinx.dataframe.api.columnOf
 import org.jetbrains.kotlinx.dataframe.api.convert
@@ -19,23 +16,21 @@ import org.jetbrains.kotlinx.dataframe.api.dataFrameOf
 import org.jetbrains.kotlinx.dataframe.api.describe
 import org.jetbrains.kotlinx.dataframe.api.explode
 import org.jetbrains.kotlinx.dataframe.api.fillNulls
+import org.jetbrains.kotlinx.dataframe.api.filter
+import org.jetbrains.kotlinx.dataframe.api.first
 import org.jetbrains.kotlinx.dataframe.api.getColumn
-import org.jetbrains.kotlinx.dataframe.api.inplace
+import org.jetbrains.kotlinx.dataframe.api.group
 import org.jetbrains.kotlinx.dataframe.api.into
 import org.jetbrains.kotlinx.dataframe.api.join
-import org.jetbrains.kotlinx.dataframe.api.joinWith
+import org.jetbrains.kotlinx.dataframe.api.last
 import org.jetbrains.kotlinx.dataframe.api.prev
+import org.jetbrains.kotlinx.dataframe.api.print
 import org.jetbrains.kotlinx.dataframe.api.rename
 import org.jetbrains.kotlinx.dataframe.api.rows
 import org.jetbrains.kotlinx.dataframe.api.select
 import org.jetbrains.kotlinx.dataframe.api.sortBy
-import org.jetbrains.kotlinx.dataframe.api.split
 import org.jetbrains.kotlinx.dataframe.api.toDataFrame
-import org.jetbrains.kotlinx.dataframe.api.toList
-import org.jetbrains.kotlinx.dataframe.api.unfold
-import org.jetbrains.kotlinx.dataframe.api.values
 import org.jetbrains.kotlinx.dataframe.api.with
-import org.jetbrains.kotlinx.dataframe.api.withZero
 import org.jetbrains.kotlinx.dataframe.values
 import org.junit.jupiter.api.Test
 import java.io.ByteArrayInputStream
@@ -125,38 +120,37 @@ class DataFrameTest {
         println(res.describe())
     }
 
-    @DataSchema
-    data class ResultEntry(
-        val config: PotuzSimulationConfig,
-        val result: DataFrame<CoreResult>
-    )
-
     @Test
     fun configDataExperiments() {
-        val df = loadTestResult().cast<ResultEntry>()
-//        val df3 = df.split("config").by {
-//            it as PotuzSimulationConfig
-//            listOf(
-//                it.params.erasureParams::class.simpleName,
-//                (it.params.erasureParams as? ErasureParams.RS)?.extensionFactor,
-//                (it.params.erasureParams as? ErasureParams.RS)?.isDistinctMeshesPerChunk,
-//            )
-//
-//        }.inplace()
+        val df1 = loadTestResult().normalizePotuzLoadedResults()
+        val df2 = df1.deriveExtraResults()
 
-        val col0 = df.getColumn(0).cast<PotuzSimulationConfig>()
-        val df1 = col0.values.toDataFrame()
-//        val erasureParamsCol = df1.params.erasureParams
-//        println(erasureParamsCol.describe())
-//        val configList = df1.convert("config").with { it }
-//        val df2 = configList.toDataFrame()
-//        val erasureParamsCol = df1
-//            .split { params }
-//            .by { it: DataRow<PotuzParams> -> it.get { erasureParams } }
-        println(df1.describe())
-//        val df2 = df.unfold { config }
-//        println(df2.describe())
-        //        val df3 = df2.explode()
-//        println(df3.describe())
+        println(df2.describe())
+
+        val df3 = df2
+            .convert { result }.with { res ->
+                res.last()
+            }
+            .select { config.params.numberOfChunks and result }
+
+        println(df3.describe())
+
+        df3.print(valueLimit = 10000)
+
+//        df2.getColumn {  }
+//        df2.filter { result.derived.doneMsgCnt == 1 }
+    }
+
+    @Test
+    fun tryTwoResultsWithTimings() {
+        val df1 = loadTestResult().normalizePotuzLoadedResults()
+        val df2 = df1.deriveExtraResults()
+
+        val df3 = df2.rows().first().toDataFrame()
+        val df4 = df3.explode { result }
+
+        df4.print(rowsLimit = 10000, valueLimit = 10000)
+        println(df4.describe())
+
     }
 }

@@ -13,6 +13,7 @@ import org.jetbrains.kotlinx.dataframe.api.print
 import org.jetbrains.kotlinx.dataframe.api.toDataFrame
 import org.jetbrains.kotlinx.dataframe.api.with
 import org.jetbrains.kotlinx.dataframe.io.*
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.random.Random
 
 fun main() {
@@ -21,28 +22,28 @@ fun main() {
 
     val configs: List<PotuzSimulationConfig> =
         listOf(
-//            2,
-//            6,
+            2,
+            6,
             10,
             20,
-//            40,
-//            100
+            40,
+            100
         ).flatMap { peerCount ->
             listOf(
-//                1,
-//                2,
-//                4,
+                1,
+                2,
+                4,
                 10,
                 20,
-//                40,
-//                100
+                40,
+                100
             ).flatMap { chunkCount ->
                 listOf(
                     RSParams(1, false),
                     RSParams(1, true),
                     RSParams(2, false),
                     RSParams(2, true),
-//                    RSParams(3, true),
+                    RSParams(3, true),
                     RLNCParams(),
                 ).map { erasureParams ->
                     PotuzParams.create(chunkCount, erasureParams)
@@ -62,9 +63,14 @@ fun main() {
         encodeDefaults = true
     }
 
+    val readyCounter = AtomicInteger()
     val results = configs
         .parallelStream()
-        .map { config -> config to PotuzSimulation(config).run() }
+        .map { config ->
+            val res =  PotuzSimulation(config).run()
+            println("Complete " + readyCounter.incrementAndGet() + "/" + configs.size)
+            config to res
+        }
         .toList()
         .toMap()
 

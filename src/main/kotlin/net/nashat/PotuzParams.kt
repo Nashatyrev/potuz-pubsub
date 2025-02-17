@@ -42,19 +42,3 @@ data class RSParams(
 @DataSchema
 @Serializable
 data class RLNCParams(val dummy: Int = 0)
-
-@DataSchema
-@Serializable
-sealed interface ErasureParams {
-
-    @DataSchema
-    @Serializable
-    data class RS(
-        val extensionFactor: Int,
-        val isDistinctMeshesPerChunk: Boolean
-    ) : ErasureParams
-
-    @DataSchema
-    @Serializable
-    class RLNC : ErasureParams
-}
