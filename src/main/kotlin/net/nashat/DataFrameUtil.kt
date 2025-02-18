@@ -51,6 +51,12 @@ data class ResultEntryEx(
     val result: DataFrame<ResultEx>
 )
 
+@DataSchema
+data class ResultEntryExploded(
+    val config: PotuzSimulationConfig,
+    val result: ResultEx
+)
+
 fun DataFrame<*>.normalizePotuzLoadedResults(): DataFrame<ResultEntry> {
     val df = this.cast<ResultEntry>()
     val col0 = df.getColumn(0).cast<PotuzSimulationConfig>()

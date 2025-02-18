@@ -5,6 +5,7 @@
 
 package net.nashat
 
+import org.jetbrains.kotlinx.dataframe.DataFrame
 import org.jetbrains.kotlinx.dataframe.annotations.DataSchema
 import org.jetbrains.kotlinx.dataframe.annotations.ImportDataSchema
 import org.jetbrains.kotlinx.dataframe.api.JoinType
@@ -18,19 +19,29 @@ import org.jetbrains.kotlinx.dataframe.api.explode
 import org.jetbrains.kotlinx.dataframe.api.fillNulls
 import org.jetbrains.kotlinx.dataframe.api.filter
 import org.jetbrains.kotlinx.dataframe.api.first
+import org.jetbrains.kotlinx.dataframe.api.fullJoin
 import org.jetbrains.kotlinx.dataframe.api.getColumn
 import org.jetbrains.kotlinx.dataframe.api.group
+import org.jetbrains.kotlinx.dataframe.api.groupBy
 import org.jetbrains.kotlinx.dataframe.api.into
 import org.jetbrains.kotlinx.dataframe.api.join
 import org.jetbrains.kotlinx.dataframe.api.last
+import org.jetbrains.kotlinx.dataframe.api.name
+import org.jetbrains.kotlinx.dataframe.api.named
+import org.jetbrains.kotlinx.dataframe.api.path
 import org.jetbrains.kotlinx.dataframe.api.prev
 import org.jetbrains.kotlinx.dataframe.api.print
 import org.jetbrains.kotlinx.dataframe.api.rename
 import org.jetbrains.kotlinx.dataframe.api.rows
 import org.jetbrains.kotlinx.dataframe.api.select
 import org.jetbrains.kotlinx.dataframe.api.sortBy
+import org.jetbrains.kotlinx.dataframe.api.toColumnAccessor
 import org.jetbrains.kotlinx.dataframe.api.toDataFrame
+import org.jetbrains.kotlinx.dataframe.api.toList
+import org.jetbrains.kotlinx.dataframe.api.unique
+import org.jetbrains.kotlinx.dataframe.api.values
 import org.jetbrains.kotlinx.dataframe.api.with
+import org.jetbrains.kotlinx.dataframe.columns.toColumnSet
 import org.jetbrains.kotlinx.dataframe.values
 import org.junit.jupiter.api.Test
 import java.io.ByteArrayInputStream
@@ -38,6 +49,9 @@ import java.io.ByteArrayOutputStream
 
 class DataFrameTest {
 
+    fun DataFrame<*>.dump() {
+        this.print(rowsLimit = 10000, valueLimit = 10000)
+    }
 
     @Test
     fun diffTest() {
@@ -120,6 +134,13 @@ class DataFrameTest {
         println(res.describe())
     }
 
+
+    @Test
+    fun loadFullResultTest() {
+        val resDf = PotuzIO().readResultsFromJson("result.json").normalizePotuzLoadedResults()
+        println(resDf)
+    }
+
     @Test
     fun configDataExperiments() {
         val df1 = loadTestResult().normalizePotuzLoadedResults()
@@ -142,15 +163,67 @@ class DataFrameTest {
     }
 
     @Test
-    fun tryTwoResultsWithTimings() {
+    fun tryResultsExplode() {
         val df1 = loadTestResult().normalizePotuzLoadedResults()
         val df2 = df1.deriveExtraResults()
 
-        val df3 = df2.rows().first().toDataFrame()
+        val df3 = df2.first().toDataFrame()
+
+        assert(df3.rowsCount() == 1)
+
         val df4 = df3.explode { result }
 
-        df4.print(rowsLimit = 10000, valueLimit = 10000)
-        println(df4.describe())
+        assert(df4.rowsCount() > 1)
 
+        df4.dump()
+        println(df4.describe())
+    }
+
+    @Test
+    fun testExperimentsMergeByTimeIsolated() {
+        val paramCol = columnOf(1, 1, 1, 1, 1, 2, 2, 2, 2).named("param")
+        val timeCol = columnOf(0.0, 0.1, 0.5, 0.8, 1.5, 0.2, 0.5, 0.8, 1.0).named("time")
+        val valueCol = columnOf(0, 1, 2, 3, 4, 2, 3, 4, 5).named("value")
+
+        val df = dataFrameOf(paramCol, timeCol, valueCol)
+        df.dump()
+
+        val df1 = df.groupBy { paramCol }.into("group")
+        df1.dump()
+        println(df1.describe())
+
+    }
+
+        @Test
+    fun testExperimentsMergeByTime() {
+        val df1 = loadTestResult().normalizePotuzLoadedResults()
+        val df2 = df1.deriveExtraResults()
+        val df3 = df2
+            .filter {
+                config.params.numberOfChunks == 20 &&
+                        config.peerCount == 10 &&
+                        config.params.rsParams.isDistinctMeshesPerChunk == true
+            }
+
+        val cfgDf1 = df3.select { config }.cast<PotuzSimulationConfig>()
+        cfgDf1.dump()
+
+        val changingConfigColumns = cfgDf1
+            .describe()
+            .filter { unique > 1 }
+            .values { path }
+            .toList()
+
+        cfgDf1
+            .select(*changingConfigColumns.toTypedArray())
+            .dump()
+
+        val cfgColSelector = changingConfigColumns.map { it.toColumnAccessor() }.toColumnSet()
+        val df4 = df3
+            .explode { result }
+            .cast<ResultEntryExploded>()
+            .select { cfgColSelector and result.derived.relativeRound and result.derived.doneMsgFraction }
+
+        df4.dump()
     }
 }
