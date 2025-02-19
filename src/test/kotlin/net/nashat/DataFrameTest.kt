@@ -19,6 +19,7 @@ import org.jetbrains.kotlinx.dataframe.api.explode
 import org.jetbrains.kotlinx.dataframe.api.fillNulls
 import org.jetbrains.kotlinx.dataframe.api.filter
 import org.jetbrains.kotlinx.dataframe.api.first
+import org.jetbrains.kotlinx.dataframe.api.flatten
 import org.jetbrains.kotlinx.dataframe.api.fullJoin
 import org.jetbrains.kotlinx.dataframe.api.getColumn
 import org.jetbrains.kotlinx.dataframe.api.group
@@ -137,7 +138,7 @@ class DataFrameTest {
 
     @Test
     fun loadFullResultTest() {
-        val resDf = PotuzIO().readResultsFromJson("result.json").normalizePotuzLoadedResults()
+        val resDf = PotuzIO().readResultsFromJson("results/result.json").normalizePotuzLoadedResults()
         println(resDf)
     }
 
@@ -196,34 +197,43 @@ class DataFrameTest {
 
         @Test
     fun testExperimentsMergeByTime() {
-        val df1 = loadTestResult().normalizePotuzLoadedResults()
-        val df2 = df1.deriveExtraResults()
-        val df3 = df2
+        val df1 = loadTestResult()
+            .normalizePotuzLoadedResults()
+            .deriveExtraResults()
+            .removeNonChangingConfigColumns()
+
+        df1.flatten{ config }.dump()
+
+        val df3 = df1
             .filter {
                 config.params.numberOfChunks == 20 &&
                         config.peerCount == 10 &&
                         config.params.rsParams.isDistinctMeshesPerChunk == true
-            }
+            }.removeNonChangingConfigColumns()
 
-        val cfgDf1 = df3.select { config }.cast<PotuzSimulationConfig>()
-        cfgDf1.dump()
 
-        val changingConfigColumns = cfgDf1
-            .describe()
-            .filter { unique > 1 }
-            .values { path }
-            .toList()
-
-        cfgDf1
-            .select(*changingConfigColumns.toTypedArray())
-            .dump()
-
-        val cfgColSelector = changingConfigColumns.map { it.toColumnAccessor() }.toColumnSet()
+//        val cfgDf1 = df3.select { config }.cast<PotuzSimulationConfig>()
+//        cfgDf1.dump()
+//
+//        val changingConfigColumns = cfgDf1
+//            .describe()
+//            .filter { unique > 1 }
+//            .values { path }
+//            .toList()
+//
+//        cfgDf1
+//            .select(*changingConfigColumns.toTypedArray())
+//            .dump()
+//
+//        val cfgColSelector = changingConfigColumns.map { it.toColumnAccessor() }.toColumnSet()
         val df4 = df3
             .explode { result }
             .cast<ResultEntryExploded>()
-            .select { cfgColSelector and result.derived.relativeRound and result.derived.doneMsgFraction }
+            .select { config and result.derived.relativeRound and result.derived.doneMsgFraction }
 
         df4.dump()
+
+        val df5 = df4.selectLastForEachGroup { config.params.rsParams.extensionFactor }
+        df5.dump()
     }
 }

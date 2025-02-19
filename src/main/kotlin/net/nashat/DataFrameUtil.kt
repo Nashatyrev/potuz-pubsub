@@ -2,18 +2,28 @@ package net.nashat
 
 import org.jetbrains.kotlinx.dataframe.ColumnSelector
 import org.jetbrains.kotlinx.dataframe.ColumnsSelector
-import org.jetbrains.kotlinx.dataframe.DataColumn
 import org.jetbrains.kotlinx.dataframe.DataFrame
 import org.jetbrains.kotlinx.dataframe.annotations.DataSchema
 import org.jetbrains.kotlinx.dataframe.api.add
+import org.jetbrains.kotlinx.dataframe.api.aggregate
 import org.jetbrains.kotlinx.dataframe.api.cast
 import org.jetbrains.kotlinx.dataframe.api.convert
+import org.jetbrains.kotlinx.dataframe.api.describe
+import org.jetbrains.kotlinx.dataframe.api.filter
 import org.jetbrains.kotlinx.dataframe.api.getColumn
 import org.jetbrains.kotlinx.dataframe.api.group
+import org.jetbrains.kotlinx.dataframe.api.groupBy
 import org.jetbrains.kotlinx.dataframe.api.into
+import org.jetbrains.kotlinx.dataframe.api.last
+import org.jetbrains.kotlinx.dataframe.api.path
 import org.jetbrains.kotlinx.dataframe.api.prev
+import org.jetbrains.kotlinx.dataframe.api.remove
 import org.jetbrains.kotlinx.dataframe.api.replace
+import org.jetbrains.kotlinx.dataframe.api.select
 import org.jetbrains.kotlinx.dataframe.api.toDataFrame
+import org.jetbrains.kotlinx.dataframe.api.ungroup
+import org.jetbrains.kotlinx.dataframe.api.unique
+import org.jetbrains.kotlinx.dataframe.api.values
 import org.jetbrains.kotlinx.dataframe.api.with
 import org.jetbrains.kotlinx.dataframe.columns.ColumnReference
 import org.jetbrains.kotlinx.dataframe.values
@@ -76,6 +86,21 @@ inline fun <T, reified C> DataFrame<T>.expandDataColumnToColumnGroup(column: Col
         newCol.cast<C>()
     }
 }
+
+fun <T> DataFrame<T>.removeNonChangingConfigColumns(configColumn: ColumnSelector<T, *> = { "config"() }): DataFrame<T> {
+    val cfgDf = this.select(configColumn)
+    val nonChangingConfigColumns = cfgDf
+        .describe()
+        .filter { unique == 1 }
+        .values { path }
+        .toList()
+    return this.remove(*nonChangingConfigColumns.toTypedArray())
+}
+
+fun <T> DataFrame<T>.selectLastForEachGroup(groupBy: ColumnsSelector<T, *>): DataFrame<T> =
+    this.groupBy(cols = groupBy).aggregate { last() }
+        .select("aggregated")
+        .ungroup { all() }
 
 fun DataFrame<ResultEntry>.deriveExtraResults(): DataFrame<ResultEntryEx> =
     this.convert { result }.with { coreResult ->
