@@ -40,7 +40,8 @@ data class ResultDerived(
     val doneMsgFraction: Double,
     val roundMsgCnt: Int,
     val roundDoneMsgCnt: Int,
-    val roundDupMsgCnt: Int,
+    val roundDupAfterReadyMsgCnt: Int,
+    val roundDupBeforeReadyMsgCnt: Int,
 )
 
 @DataSchema
@@ -112,6 +113,7 @@ fun DataFrame<ResultEntry>.deriveExtraResults(): DataFrame<ResultEntryEx> =
                 val doneMessageCnt = core.totalMsgCnt - core.dupMsgCnt
                 val roundMsgCnt = core.totalMsgCnt - (prev()?.core?.totalMsgCnt ?: 0)
                 val roundDupMsgCnt = core.dupMsgCnt - (prev()?.core?.dupMsgCnt ?: 0)
+                val roundDupBeforeReadyMsgCnt = core.dupBeforeDone - (prev()?.core?.dupBeforeDone ?: 0)
                 val expectedDoneMessages = (config.nodeCount - 1) * numChunks
                 ResultDerived(
                     relativeRound = index().toDouble() / numChunks,
@@ -119,7 +121,8 @@ fun DataFrame<ResultEntry>.deriveExtraResults(): DataFrame<ResultEntryEx> =
                     doneMsgFraction = doneMessageCnt.toDouble() / expectedDoneMessages,
                     roundMsgCnt = roundMsgCnt,
                     roundDoneMsgCnt = roundMsgCnt - roundDupMsgCnt,
-                    roundDupMsgCnt = roundDupMsgCnt
+                    roundDupAfterReadyMsgCnt = roundDupMsgCnt - roundDupBeforeReadyMsgCnt,
+                    roundDupBeforeReadyMsgCnt = roundDupBeforeReadyMsgCnt
                 )
             }
         val df2 = df1.expandDataColumnToColumnGroup(df1.getColumn("derived").cast<ResultDerived>())
