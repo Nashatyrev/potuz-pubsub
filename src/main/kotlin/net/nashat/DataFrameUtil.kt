@@ -15,6 +15,7 @@ import org.jetbrains.kotlinx.dataframe.api.group
 import org.jetbrains.kotlinx.dataframe.api.groupBy
 import org.jetbrains.kotlinx.dataframe.api.into
 import org.jetbrains.kotlinx.dataframe.api.last
+import org.jetbrains.kotlinx.dataframe.api.map
 import org.jetbrains.kotlinx.dataframe.api.path
 import org.jetbrains.kotlinx.dataframe.api.prev
 import org.jetbrains.kotlinx.dataframe.api.remove
@@ -28,11 +29,6 @@ import org.jetbrains.kotlinx.dataframe.api.with
 import org.jetbrains.kotlinx.dataframe.columns.ColumnReference
 import org.jetbrains.kotlinx.dataframe.values
 
-class DataFrameUtil {
-    companion object {
-    }
-}
-
 @DataSchema
 data class ResultDerived(
     val relativeRound: Double,
@@ -44,9 +40,72 @@ data class ResultDerived(
     val roundDupBeforeReadyMsgCnt: Int,
 )
 
+enum class Erasure(val isDistinctMeshes: Boolean, val extensionFactor: Int) {
+    NoErasure(true, 1),
+    RsX2(true, 2),
+    RsX3(true, 3),
+    RLNC(true, 10000),
+    NoErasureOneMesh(false,1),
+    RsX2OneMesh(false, 2),
+    RsX3OneMesh(false, 3);
+
+    companion object {
+        fun fromColumns(rsExtensionFactor: Int?, rsIsDistinctMeshes: Boolean?, rlncDummy: Any?): Erasure =
+            when {
+                rlncDummy != null -> Erasure.RLNC
+                rsExtensionFactor!! == 1 && rsIsDistinctMeshes!! -> Erasure.NoErasure
+                rsExtensionFactor == 1 && !(rsIsDistinctMeshes!!) -> Erasure.NoErasureOneMesh
+                rsExtensionFactor == 2 && rsIsDistinctMeshes!! -> Erasure.RsX2
+                rsExtensionFactor == 2 && !(rsIsDistinctMeshes!!) -> Erasure.RsX2OneMesh
+                rsExtensionFactor == 3 && rsIsDistinctMeshes!! -> Erasure.RsX3
+                rsExtensionFactor == 3 && !(rsIsDistinctMeshes!!) -> Erasure.RsX3OneMesh
+                else -> throw IllegalArgumentException("Invalid column configuration")
+            }
+    }
+}
+
+//fun DataFrame<*>.replaceErasureConfigWithEnum(): DataFrame<*> {
+//    val df = cast<ResultEntry>()
+//
+//    return df.merge {
+//        config.params.rsParams and config.params.rlncParams
+//    }.by {
+//        Erasure.fromColumns(
+//            config.params.rsParams.extensionFactor,
+//            config.params.rsParams.isDistinctMeshesPerChunk,
+//            config.params.rlncParams.dummy
+//        )
+//    }
+////        .into(pathOf("config", "params", "erasure")) // doesn't work for some reason
+//        .into(df.getColumn { config.params.rlncParams }.path())
+//        .rename { "config"()["params"]["rlncParams"] }.into("erasure")
+//
+//}
+@DataSchema
+data class SimConfig(
+    val erasure: Erasure,
+    val numberOfChunks: Int,
+    val nodeCount: Int = 1000,
+    val peerCount: Int,
+    val isGodStopMode: Boolean,
+    val randomSeed: Long = 0,
+) {
+    companion object {
+        fun fromPotuzSimulationConfig(cfg: PotuzSimulationConfig) =
+            SimConfig(
+                Erasure.fromColumns(cfg.params.rsParams?.extensionFactor, cfg.params.rsParams?.isDistinctMeshesPerChunk, cfg.params.rlncParams?.dummy),
+                cfg.params.numberOfChunks,
+                cfg.nodeCount,
+                cfg.peerCount,
+                cfg.isGodStopMode,
+                cfg.randomSeed
+            )
+    }
+}
+
 @DataSchema
 data class ResultEntry(
-    val config: PotuzSimulationConfig,
+    val config: SimConfig,
     val result: DataFrame<CoreResult>
 )
 
@@ -58,26 +117,24 @@ data class ResultEx(
 
 @DataSchema
 data class ResultEntryEx(
-    val config: PotuzSimulationConfig,
+    val config: SimConfig,
     val result: DataFrame<ResultEx>
 )
 
 @DataSchema
 data class ResultEntryExploded(
-    val config: PotuzSimulationConfig,
+    val config: SimConfig,
     val result: ResultEx
 )
 
 fun DataFrame<*>.normalizePotuzLoadedResults(): DataFrame<ResultEntry> {
     val df = this.cast<ResultEntry>()
     val col0 = df.getColumn(0).cast<PotuzSimulationConfig>()
-    val df3 = df.expandDataColumnToColumnGroup(col0)
+    val colConfig = col0.map { SimConfig.fromPotuzSimulationConfig(it) }
+    val colDf = colConfig.values.toDataFrame().group { all() }.into("config")
+    val df3 = df.replace(col0).with(colDf.getColumn(0))
     return df3
 }
-
-//inline fun <T, reified C> DataFrame<T>.expandDataColumnToColumnGroup(noinline columns: ColumnSelector<T, C>): DataFrame<T> {
-//    return expandDataColumnToColumnGroup(this.getColumn(columns))
-//}
 
 inline fun <T, reified C> DataFrame<T>.expandDataColumnToColumnGroup(column: ColumnReference<C>): DataFrame<T> {
     return this.replace(column).with { col ->
@@ -109,7 +166,7 @@ fun DataFrame<ResultEntry>.deriveExtraResults(): DataFrame<ResultEntryEx> =
             .group { all() }.into("core")
             .cast<ResultEx>()
             .add("derived") {
-                val numChunks = config.params.numberOfChunks
+                val numChunks = config.numberOfChunks
                 val doneMessageCnt = core.totalMsgCnt - core.dupMsgCnt
                 val roundMsgCnt = core.totalMsgCnt - (prev()?.core?.totalMsgCnt ?: 0)
                 val roundDupMsgCnt = core.dupMsgCnt - (prev()?.core?.dupMsgCnt ?: 0)

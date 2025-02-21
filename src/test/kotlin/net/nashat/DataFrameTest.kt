@@ -153,7 +153,8 @@ class DataFrameTest {
             .convert { result }.with { res ->
                 res.last()
             }
-            .select { config.params.numberOfChunks and result }
+            .filter { config.numberOfChunks == 1 }
+            .select { config.numberOfChunks and result }
 
         println(df3.describe())
 
@@ -206,9 +207,9 @@ class DataFrameTest {
 
         val df3 = df1
             .filter {
-                config.params.numberOfChunks == 20 &&
+                config.numberOfChunks == 20 &&
                         config.peerCount == 10 &&
-                        config.params.rsParams.isDistinctMeshesPerChunk == true
+                        config.erasure.isDistinctMeshes == true
             }.removeNonChangingConfigColumns()
 
 
@@ -233,7 +234,7 @@ class DataFrameTest {
 
         df4.dump()
 
-        val df5 = df4.selectLastForEachGroup { config.params.rsParams.extensionFactor }
+        val df5 = df4.selectLastForEachGroup { config.erasure }
         df5.dump()
     }
 }
