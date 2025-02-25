@@ -79,7 +79,7 @@ fun <T> DataFrame<T>.myPlotMessageCount(
         .into(msgCountType, msgCount)
 
     return gatheredDf
-        .groupBy { msgCountType and getColumn(groupCol) }
+        .groupBy { getColumn(groupCol) and msgCountType  }
         .plot {
             area {
                 x(result.derived.relativeRound)

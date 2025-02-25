@@ -5,7 +5,10 @@
 
 package net.nashat
 
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 import org.jetbrains.kotlinx.dataframe.DataFrame
+import org.jetbrains.kotlinx.dataframe.DataRow
 import org.jetbrains.kotlinx.dataframe.annotations.DataSchema
 import org.jetbrains.kotlinx.dataframe.annotations.ImportDataSchema
 import org.jetbrains.kotlinx.dataframe.api.JoinType
@@ -15,44 +18,28 @@ import org.jetbrains.kotlinx.dataframe.api.columnOf
 import org.jetbrains.kotlinx.dataframe.api.convert
 import org.jetbrains.kotlinx.dataframe.api.dataFrameOf
 import org.jetbrains.kotlinx.dataframe.api.describe
-import org.jetbrains.kotlinx.dataframe.api.explode
 import org.jetbrains.kotlinx.dataframe.api.fillNulls
-import org.jetbrains.kotlinx.dataframe.api.filter
-import org.jetbrains.kotlinx.dataframe.api.first
-import org.jetbrains.kotlinx.dataframe.api.flatten
-import org.jetbrains.kotlinx.dataframe.api.fullJoin
 import org.jetbrains.kotlinx.dataframe.api.getColumn
-import org.jetbrains.kotlinx.dataframe.api.group
-import org.jetbrains.kotlinx.dataframe.api.groupBy
+import org.jetbrains.kotlinx.dataframe.api.getColumnGroup
+import org.jetbrains.kotlinx.dataframe.api.inferType
 import org.jetbrains.kotlinx.dataframe.api.into
 import org.jetbrains.kotlinx.dataframe.api.join
-import org.jetbrains.kotlinx.dataframe.api.last
-import org.jetbrains.kotlinx.dataframe.api.name
-import org.jetbrains.kotlinx.dataframe.api.named
-import org.jetbrains.kotlinx.dataframe.api.path
 import org.jetbrains.kotlinx.dataframe.api.prev
-import org.jetbrains.kotlinx.dataframe.api.print
 import org.jetbrains.kotlinx.dataframe.api.rename
 import org.jetbrains.kotlinx.dataframe.api.rows
-import org.jetbrains.kotlinx.dataframe.api.select
 import org.jetbrains.kotlinx.dataframe.api.sortBy
-import org.jetbrains.kotlinx.dataframe.api.toColumnAccessor
 import org.jetbrains.kotlinx.dataframe.api.toDataFrame
-import org.jetbrains.kotlinx.dataframe.api.toList
-import org.jetbrains.kotlinx.dataframe.api.unique
-import org.jetbrains.kotlinx.dataframe.api.values
+import org.jetbrains.kotlinx.dataframe.api.unfold
+import org.jetbrains.kotlinx.dataframe.api.ungroup
 import org.jetbrains.kotlinx.dataframe.api.with
-import org.jetbrains.kotlinx.dataframe.columns.toColumnSet
+import org.jetbrains.kotlinx.dataframe.io.readJson
+import org.jetbrains.kotlinx.dataframe.io.writeJson
 import org.jetbrains.kotlinx.dataframe.values
 import org.junit.jupiter.api.Test
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 
 class DataFrameTest {
-
-    fun DataFrame<*>.dump() {
-        this.print(rowsLimit = 10000, valueLimit = 10000)
-    }
 
     @Test
     fun diffTest() {
@@ -78,7 +65,7 @@ class DataFrameTest {
             peerCount = 50,
             isGodStopMode = false
         )
-        val res = CoreResult(1, 2, 3, 4, 5, 6)
+        val res = CoreResult(1, 2, 3, 4, 5, 6, emptyList())
         val df = listOf(res).toDataFrame()
 
         val writer = buf.writer()
@@ -125,116 +112,68 @@ class DataFrameTest {
         println(df3)
     }
 
-    private fun loadTestResult() = PotuzIO().readResultsFromJson(
-        this.javaClass.getResource("/result1.json")?.file ?: throw IllegalStateException("Result1 file not found")
-    )
-
     @Test
-    fun testLoadResults() {
-        val res = loadTestResult()
-        println(res.describe())
-    }
+    fun structureVsColumnGroupTest() {
 
+        val structRows = listOf(
+            Wrapper(10, Struct(1, "s1"), TestEnum.E1),
+            Wrapper(20, Struct(2, "s2"), TestEnum.E2),
+            Wrapper(30, Struct(3, "s3"), TestEnum.E3),
+        )
 
-    @Test
-    fun loadFullResultTest() {
-        val resDf = PotuzIO().readResultsFromJson("results/result.json").normalizePotuzLoadedResults()
-        println(resDf)
-    }
+        val df0 = structRows.toDataFrame()
+        val df0_1 = columnOf(*structRows.toTypedArray()).toDataFrame().cast<Wrapper>()
+//        val df0_2 = df0.convert { "struct"<Struct>() }.to<Wrapper>()
+        val df0_2 = df0_1.unfold { all() }.ungroup { all() }
+//        val df0_3 = df0_2.fold()
 
-    @Test
-    fun configDataExperiments() {
-        val df1 = loadTestResult().normalizePotuzLoadedResults()
-        val df2 = df1.deriveExtraResults()
+        val aaa = df0.convert { struct }.with { it.foldToObject().s }
 
+        df0.dump()
+        println(df0.describe())
+        df0_1.dump()
+        println(df0_1.describe())
+
+        val os = ByteArrayOutputStream()
+
+        os.writer().use {
+            df0.writeJson(it, true)
+        }
+
+        val json = os.toString(Charsets.UTF_8)
+        println(json)
+
+        val list = Json.decodeFromString<List<Wrapper>>(json)
+
+        val df1 = DataFrame.readJson(ByteArrayInputStream(os.toByteArray()))
+        val df2 = df1.cast<Wrapper>()
+
+        df2.dump()
         println(df2.describe())
 
-        val df3 = df2
-            .convert { result }.with { res ->
-                res.last()
-            }
-            .filter { config.numberOfChunks == 1 }
-            .select { config.numberOfChunks and result }
+        val structCol = df2.getColumn { "struct"<Struct>() }
+        val values = structCol.values.toList()
 
-        println(df3.describe())
-
-        df3.print(valueLimit = 10000)
-
-//        df2.getColumn {  }
-//        df2.filter { result.derived.doneMsgCnt == 1 }
-    }
-
-    @Test
-    fun tryResultsExplode() {
-        val df1 = loadTestResult().normalizePotuzLoadedResults()
-        val df2 = df1.deriveExtraResults()
-
-        val df3 = df2.first().toDataFrame()
-
-        assert(df3.rowsCount() == 1)
-
-        val df4 = df3.explode { result }
-
-        assert(df4.rowsCount() > 1)
-
-        df4.dump()
-        println(df4.describe())
-    }
-
-    @Test
-    fun testExperimentsMergeByTimeIsolated() {
-        val paramCol = columnOf(1, 1, 1, 1, 1, 2, 2, 2, 2).named("param")
-        val timeCol = columnOf(0.0, 0.1, 0.5, 0.8, 1.5, 0.2, 0.5, 0.8, 1.0).named("time")
-        val valueCol = columnOf(0, 1, 2, 3, 4, 2, 3, 4, 5).named("value")
-
-        val df = dataFrameOf(paramCol, timeCol, valueCol)
-        df.dump()
-
-        val df1 = df.groupBy { paramCol }.into("group")
-        df1.dump()
-        println(df1.describe())
-
-    }
-
-        @Test
-    fun testExperimentsMergeByTime() {
-        val df1 = loadTestResult()
-            .normalizePotuzLoadedResults()
-            .deriveExtraResults()
-            .removeNonChangingConfigColumns()
-
-        df1.flatten{ config }.dump()
-
-        val df3 = df1
-            .filter {
-                config.numberOfChunks == 20 &&
-                        config.peerCount == 10 &&
-                        config.erasure.isDistinctMeshes == true
-            }.removeNonChangingConfigColumns()
-
-
-//        val cfgDf1 = df3.select { config }.cast<PotuzSimulationConfig>()
-//        cfgDf1.dump()
-//
-//        val changingConfigColumns = cfgDf1
-//            .describe()
-//            .filter { unique > 1 }
-//            .values { path }
-//            .toList()
-//
-//        cfgDf1
-//            .select(*changingConfigColumns.toTypedArray())
-//            .dump()
-//
-//        val cfgColSelector = changingConfigColumns.map { it.toColumnAccessor() }.toColumnSet()
-        val df4 = df3
-            .explode { result }
-            .cast<ResultEntryExploded>()
-            .select { config and result.derived.relativeRound and result.derived.doneMsgFraction }
-
-        df4.dump()
-
-        val df5 = df4.selectLastForEachGroup { config.erasure }
-        df5.dump()
+        println(values.first().i)
     }
 }
+
+@Serializable
+@DataSchema
+data class Struct(
+    val i: Int,
+    val s: String
+)
+
+enum class TestEnum {
+    E1, E2, E3
+}
+
+@Serializable
+@DataSchema
+data class Wrapper(
+    val wi: Int,
+    val struct: Struct,
+    val en: TestEnum
+)
+

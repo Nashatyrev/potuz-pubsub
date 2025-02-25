@@ -40,7 +40,7 @@ abstract class AbstractNode(
 
     fun doNothing() {}
 
-    fun receive(msg: PotuzMessage, hop: Int) {
+    open fun receive(msg: PotuzMessage, hop: Int) {
         val isNew: Boolean
 
         if (!isRecovered()) {

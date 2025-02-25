@@ -3,10 +3,12 @@ package net.nashat
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.jetbrains.kotlinx.dataframe.DataFrame
+import org.jetbrains.kotlinx.dataframe.annotations.DataSchema
 import org.jetbrains.kotlinx.dataframe.api.columnOf
 import org.jetbrains.kotlinx.dataframe.api.convert
 import org.jetbrains.kotlinx.dataframe.api.dataFrameOf
 import org.jetbrains.kotlinx.dataframe.api.named
+import org.jetbrains.kotlinx.dataframe.api.toDataFrame
 import org.jetbrains.kotlinx.dataframe.api.with
 import org.jetbrains.kotlinx.dataframe.io.readJson
 import org.jetbrains.kotlinx.dataframe.io.writeJson
@@ -39,8 +41,9 @@ class PotuzIO {
         val configColumn = columnOf(*configs.toTypedArray()).named("config")
         val resultColumn = columnOf(*results.toTypedArray()).named("result")
 
-        val allDf = dataFrameOf(configColumn, resultColumn)
-            .convert(configColumn).with { jsonFile.encodeToString(it) }
+        val allDf =
+            RawConfigResultEntry.createRawResultDataFrame(configs, results)
+                .convert(configColumn).with { jsonFile.encodeToString(it) }
 
         allDf.writeJson(out, prettyPrint = true)
     }
@@ -54,5 +57,9 @@ class PotuzIO {
     fun readResultsFromJson(input: InputStream): DataFrame<Any?> {
         return DataFrame.readJson(input)
             .convert("config").with { jsonFile.decodeFromString<PotuzSimulationConfig>(it.toString()) }
+    }
+
+    companion object {
+
     }
 }

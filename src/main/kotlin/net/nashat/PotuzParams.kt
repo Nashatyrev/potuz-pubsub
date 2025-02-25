@@ -4,6 +4,10 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import org.jetbrains.kotlinx.dataframe.annotations.DataSchema
 
+enum class ChunkSelectionStrategy {
+    Random, PreferLater, PreferRarest
+}
+
 @DataSchema
 @Serializable
 data class PotuzParams(
@@ -11,7 +15,8 @@ data class PotuzParams(
 //    val erasureParams: ErasureParams,
     val rsParams: RSParams? = null,
     val rlncParams: RLNCParams? = null,
-    val pPrime: String = PRIME_2_IN_8_PLUS_1
+    val pPrime: String = PRIME_2_IN_8_PLUS_1,
+    val chunkSelectionStrategy: ChunkSelectionStrategy = ChunkSelectionStrategy.Random
 ) {
     @Transient
     val maxMultiplier = try {

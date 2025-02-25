@@ -11,7 +11,11 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.random.Random
 
 fun main() {
+//    runAll()
+    noErasureCodingDispersionTest()
+}
 
+fun runAll() {
     val startT = System.currentTimeMillis()
 
     val configs: List<PotuzSimulationConfig> =
@@ -61,7 +65,7 @@ fun main() {
     val results = configs
         .parallelStream()
         .map { config ->
-            val res =  PotuzSimulation(config).run()
+            val res = PotuzSimulation(config).run()
             println("Complete " + readyCounter.incrementAndGet() + "/" + configs.size)
             config to res
         }
@@ -80,6 +84,21 @@ fun main() {
     println("Completed in ${System.currentTimeMillis() - startT} ms")
 }
 
+fun noErasureCodingDispersionTest() {
+    val cfg = PotuzSimulationConfig(
+        params = PotuzParams(
+            numberOfChunks = 10,
+            chunkSelectionStrategy = ChunkSelectionStrategy.PreferRarest,
+            rsParams = RSParams(1, true)
+        ),
+        peerCount = 10,
+        isGodStopMode = true
+    )
+
+    val res = PotuzSimulation(cfg, logEveryRound = true).run()
+    res.print(rowsLimit = 10000, valueLimit = 10000)
+}
+
 fun mainTest() {
     val cfg = PotuzSimulationConfig(
         params = PotuzParams(100, rsParams = RSParams(1, false)),
@@ -90,28 +109,9 @@ fun mainTest() {
     PotuzSimulation(cfg, logEveryRound = true).run()
 }
 
-@Serializable
-@DataSchema
-data class PotuzSimulationConfig(
-    val params: PotuzParams,
-    val nodeCount: Int = 1000,
-    val peerCount: Int,
-    val isGodStopMode: Boolean,
-    val randomSeed: Long = 0,
-)
-
-@DataSchema
-data class CoreResult(
-    val doneNodeCnt: Int,
-    val activeNodeCnt: Int,
-    val totalMsgCnt: Int,
-    val dupMsgCnt: Int,
-    val dupBeforeDone: Int,
-    val dupOneConn: Int,
-)
-
 class PotuzSimulation(
     val config: PotuzSimulationConfig,
+    val withChunkDistribution: Boolean = false,
     val logEveryRound: Boolean = false
 ) {
 
@@ -190,6 +190,7 @@ class PotuzSimulation(
 
     fun getAllMessagesForRound(round: Int) =
         nodes.flatMap { it.receivedMessages.filter { it.hop == round } }
+
     fun getDuplicateOneConnectionMessagesForRound(round: Int) =
         getAllMessagesForRound(round)
             .groupBy { setOf(it.msg.from, it.msg.to) to it.msg.coefs }
@@ -199,18 +200,38 @@ class PotuzSimulation(
                 }
                 messages.size > 1
             }
-    val allMessagesByPeer
-        get() =
-            allMessages
-                .filter { it.msg.descriptor.originalVectorId == 1 }
-                .flatMap { listOf(it.msg.to to it, it.msg.from to it) }
-                .groupBy { it.first }
-                .mapValues { (_, value) -> value.map { it.second } }
+
+    //    val allMessagesByPeer
+//        get() =
+//            allMessages
+//                .filter { it.msg.descriptor.originalVectorId == 1 }
+//                .flatMap { listOf(it.msg.to to it, it.msg.from to it) }
+//                .groupBy { it.first }
+//                .mapValues { (_, value) -> value.map { it.second } }
     val receivedNodeCount get() = nodes.count { it.isRecovered() }
     val activeNodeCount get() = nodes.count { it.isActive() }
     val totalChunksCount get() = nodes.sumOf { it.getChunksCount() }
     val targetTotalChunksCount = config.nodeCount * config.params.numberOfChunks
     val allReceived get() = receivedNodeCount == config.nodeCount
+
+    fun chunkDistribution() =
+        nodes
+            .map {
+                it.coefDescriptors.flatMap {
+                    it.getAllOriginalVectorsRecursively().map { it.originalVectorId!! }
+                }.toSet()
+            }
+            .fold(mutableMapOf<Int, Int>()) { acc, vectorIds ->
+                vectorIds.forEach { vectorId ->
+                    acc.compute(vectorId) { _, oldCount ->
+                        (oldCount ?: 0) + 1
+                    }
+                }
+                acc
+            }
+            .let { map ->
+                List(map.keys.max() + 1) { map[it] ?: 0 }
+            }
 
     fun run(): DataFrame<CoreResult> {
         val rows = mutableListOf<CoreResult>()
@@ -233,7 +254,8 @@ class PotuzSimulation(
                 totalMessageCount,
                 duplicateMessageCount,
                 duplicateMessageBeforeRecoverCount,
-                duplicateOneConnectionMessagesAccum
+                duplicateOneConnectionMessagesAccum,
+                chunkDistribution()
             )
 
             if (logEveryRound) {
@@ -246,5 +268,22 @@ class PotuzSimulation(
         val dataFrame = rows.toDataFrame()
 
         return dataFrame
+    }
+
+    companion object {
+        fun runAll(
+            configs: List<PotuzSimulationConfig>, withChunkDistribution: Boolean = false
+        ): DataFrame<RawConfigResultEntry> {
+            val readyCounter = AtomicInteger()
+            val results = configs
+                .parallelStream()
+                .map { config ->
+                    val res = PotuzSimulation(config, withChunkDistribution = withChunkDistribution).run()
+                    println("Complete " + readyCounter.incrementAndGet() + "/" + configs.size)
+                    RawConfigResultEntry(config, res)
+                }
+                .toList()
+            return results.toDataFrame()
+        }
     }
 }

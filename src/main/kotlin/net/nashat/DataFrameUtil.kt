@@ -1,9 +1,10 @@
 package net.nashat
 
+import kotlinx.serialization.json.Json
 import org.jetbrains.kotlinx.dataframe.ColumnSelector
 import org.jetbrains.kotlinx.dataframe.ColumnsSelector
 import org.jetbrains.kotlinx.dataframe.DataFrame
-import org.jetbrains.kotlinx.dataframe.annotations.DataSchema
+import org.jetbrains.kotlinx.dataframe.DataRow
 import org.jetbrains.kotlinx.dataframe.api.add
 import org.jetbrains.kotlinx.dataframe.api.aggregate
 import org.jetbrains.kotlinx.dataframe.api.cast
@@ -22,119 +23,31 @@ import org.jetbrains.kotlinx.dataframe.api.remove
 import org.jetbrains.kotlinx.dataframe.api.replace
 import org.jetbrains.kotlinx.dataframe.api.select
 import org.jetbrains.kotlinx.dataframe.api.toDataFrame
+import org.jetbrains.kotlinx.dataframe.api.unfold
 import org.jetbrains.kotlinx.dataframe.api.ungroup
 import org.jetbrains.kotlinx.dataframe.api.unique
 import org.jetbrains.kotlinx.dataframe.api.values
 import org.jetbrains.kotlinx.dataframe.api.with
 import org.jetbrains.kotlinx.dataframe.columns.ColumnReference
+import org.jetbrains.kotlinx.dataframe.io.writeJson
 import org.jetbrains.kotlinx.dataframe.values
+import java.io.ByteArrayOutputStream
 
-@DataSchema
-data class ResultDerived(
-    val relativeRound: Double,
-    val doneMsgCnt: Int,
-    val doneMsgFraction: Double,
-    val roundMsgCnt: Int,
-    val roundDoneMsgCnt: Int,
-    val roundDupAfterReadyMsgCnt: Int,
-    val roundDupBeforeReadyMsgCnt: Int,
-)
+fun DataFrame<*>.normalizePotuzLoadedResults(): DataFrame<ResultEntry> =
+    this
+        .unfoldPotuzConfig()
+        .convertRawConfigToSimConfig()
 
-enum class Erasure(val isDistinctMeshes: Boolean, val extensionFactor: Int) {
-    NoErasure(true, 1),
-    RsX2(true, 2),
-    RsX3(true, 3),
-    RLNC(true, 10000),
-    NoErasureOneMesh(false,1),
-    RsX2OneMesh(false, 2),
-    RsX3OneMesh(false, 3);
+fun DataFrame<*>.unfoldPotuzConfig(): DataFrame<RawConfigResultEntry> =
+    this
+        .cast<RawConfigResultEntry>()
+        .unfold { "config"() }
 
-    companion object {
-        fun fromColumns(rsExtensionFactor: Int?, rsIsDistinctMeshes: Boolean?, rlncDummy: Any?): Erasure =
-            when {
-                rlncDummy != null -> Erasure.RLNC
-                rsExtensionFactor!! == 1 && rsIsDistinctMeshes!! -> Erasure.NoErasure
-                rsExtensionFactor == 1 && !(rsIsDistinctMeshes!!) -> Erasure.NoErasureOneMesh
-                rsExtensionFactor == 2 && rsIsDistinctMeshes!! -> Erasure.RsX2
-                rsExtensionFactor == 2 && !(rsIsDistinctMeshes!!) -> Erasure.RsX2OneMesh
-                rsExtensionFactor == 3 && rsIsDistinctMeshes!! -> Erasure.RsX3
-                rsExtensionFactor == 3 && !(rsIsDistinctMeshes!!) -> Erasure.RsX3OneMesh
-                else -> throw IllegalArgumentException("Invalid column configuration")
-            }
-    }
-}
-
-//fun DataFrame<*>.replaceErasureConfigWithEnum(): DataFrame<*> {
-//    val df = cast<ResultEntry>()
-//
-//    return df.merge {
-//        config.params.rsParams and config.params.rlncParams
-//    }.by {
-//        Erasure.fromColumns(
-//            config.params.rsParams.extensionFactor,
-//            config.params.rsParams.isDistinctMeshesPerChunk,
-//            config.params.rlncParams.dummy
-//        )
-//    }
-////        .into(pathOf("config", "params", "erasure")) // doesn't work for some reason
-//        .into(df.getColumn { config.params.rlncParams }.path())
-//        .rename { "config"()["params"]["rlncParams"] }.into("erasure")
-//
-//}
-@DataSchema
-data class SimConfig(
-    val erasure: Erasure,
-    val numberOfChunks: Int,
-    val nodeCount: Int = 1000,
-    val peerCount: Int,
-    val isGodStopMode: Boolean,
-    val randomSeed: Long = 0,
-) {
-    companion object {
-        fun fromPotuzSimulationConfig(cfg: PotuzSimulationConfig) =
-            SimConfig(
-                Erasure.fromColumns(cfg.params.rsParams?.extensionFactor, cfg.params.rsParams?.isDistinctMeshesPerChunk, cfg.params.rlncParams?.dummy),
-                cfg.params.numberOfChunks,
-                cfg.nodeCount,
-                cfg.peerCount,
-                cfg.isGodStopMode,
-                cfg.randomSeed
-            )
-    }
-}
-
-@DataSchema
-data class ResultEntry(
-    val config: SimConfig,
-    val result: DataFrame<CoreResult>
-)
-
-@DataSchema
-data class ResultEx(
-    val core: CoreResult,
-    val derived: ResultDerived
-)
-
-@DataSchema
-data class ResultEntryEx(
-    val config: SimConfig,
-    val result: DataFrame<ResultEx>
-)
-
-@DataSchema
-data class ResultEntryExploded(
-    val config: SimConfig,
-    val result: ResultEx
-)
-
-fun DataFrame<*>.normalizePotuzLoadedResults(): DataFrame<ResultEntry> {
-    val df = this.cast<ResultEntry>()
-    val col0 = df.getColumn(0).cast<PotuzSimulationConfig>()
-    val colConfig = col0.map { SimConfig.fromPotuzSimulationConfig(it) }
-    val colDf = colConfig.values.toDataFrame().group { all() }.into("config")
-    val df3 = df.replace(col0).with(colDf.getColumn(0))
-    return df3
-}
+fun DataFrame<RawConfigResultEntry>.convertRawConfigToSimConfig(): DataFrame<ResultEntry> =
+    this.convert { config }
+        .with { SimConfig.fromPotuzSimulationConfigRow(it) }
+        .unfold { "config"() }
+        .cast(/*verify = true*/)
 
 inline fun <T, reified C> DataFrame<T>.expandDataColumnToColumnGroup(column: ColumnReference<C>): DataFrame<T> {
     return this.replace(column).with { col ->
@@ -185,4 +98,22 @@ fun DataFrame<ResultEntry>.deriveExtraResults(): DataFrame<ResultEntryEx> =
         val df2 = df1.expandDataColumnToColumnGroup(df1.getColumn("derived").cast<ResultDerived>())
         df2.cast<ResultEx>()
     }.cast<ResultEntryEx>()
+
+
+val jsoner = Json {
+    ignoreUnknownKeys = true
+}
+/**
+ * Kinda inverse operation for DataFrame#unfold.
+ * Suboptimal and hacky but the easiest way
+ */
+inline fun <reified T> DataRow<T>.foldToObject(): T {
+    val os = ByteArrayOutputStream()
+    os.writer().use {
+        this.writeJson(it)
+    }
+    val json = os.toString(Charsets.UTF_8)
+    val obj = jsoner.decodeFromString<T>(json)
+    return obj
+}
 

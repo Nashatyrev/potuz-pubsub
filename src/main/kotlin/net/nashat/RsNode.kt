@@ -5,10 +5,10 @@ import kotlin.random.Random
 class RsNode(index: Int, rnd: Random, params: PotuzParams, chunkMeshes: List<RandomNetwork>) :
     AbstractNode(index, rnd, params) {
 
-
     val rsParams = params.rsParams!!
     val numberOfExtendedChunks = params.numberOfChunks * rsParams.extensionFactor
     val chunkMeshes = chunkMeshes.map { it.connections[index]!! }
+    val receivedVectorIdCount = mutableMapOf<Int, Int>()
 
     init {
         require(chunkMeshes.size == numberOfExtendedChunks)
@@ -40,8 +40,25 @@ class RsNode(index: Int, rnd: Random, params: PotuzParams, chunkMeshes: List<Ran
         }
 
         // prefer later (and thus more rare) vectors
-        val vectorCandidateIndices = currentMartix.coefVectors.indices
-            .sortedByDescending { coefDescriptors[it].originalVectorId }
+        val vectorCandidateIndices =
+            when (params.chunkSelectionStrategy) {
+                ChunkSelectionStrategy.PreferLater ->
+                    currentMartix.coefVectors.indices
+                        .sortedByDescending { coefDescriptors[it].originalVectorId }
+
+                ChunkSelectionStrategy.Random ->
+                    currentMartix.coefVectors.indices.shuffled(rnd)
+
+                ChunkSelectionStrategy.PreferRarest ->
+                    currentMartix.coefVectors.indices
+                        .sortedWith(
+                            compareBy<Int> {
+                                receivedVectorIdCount[it] ?: 0
+                            }.thenByDescending {
+                                coefDescriptors[it].originalVectorId
+                            }
+                        )
+            }
 
         for (existingVectorIdx in vectorCandidateIndices) {
             val existingVector = currentMartix.coefVectors[existingVectorIdx]
@@ -100,5 +117,10 @@ class RsNode(index: Int, rnd: Random, params: PotuzParams, chunkMeshes: List<Ran
             }
         }
         return null
+    }
+
+    override fun receive(msg: PotuzMessage, hop: Int) {
+        super.receive(msg, hop)
+        receivedVectorIdCount.compute(msg.descriptor.originalVectorId!!) { _, old -> (old ?: 0) + 1 }
     }
 }
