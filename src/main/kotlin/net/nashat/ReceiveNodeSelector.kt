@@ -21,28 +21,22 @@ fun interface ReceiveNodeSelectorStrategy {
                 }
             }
 
-        fun createRandomSingleReceiveMessage(allNodes: List<AbstractNode>, rnd: Random): ReceiveNodeSelectorStrategy =
+        fun createRandomSingleReceiveMessage(allNodes: List<AbstractNode>): ReceiveNodeSelectorStrategy =
             ReceiveNodeSelectorStrategy {
-                val receivingNodes = mutableSetOf<AbstractNode>()
                 object : ReceiveNodeSelector {
-                    override fun selectReceivingNodeCandidates(sender: AbstractNode): List<AbstractNode> = allNodes - sender - receivingNodes
-                    override fun onReceiverSelected(receiver: AbstractNode, sender: AbstractNode) {
-                        receivingNodes += receiver
-                    }
+                    override fun selectReceivingNodeCandidates(sender: AbstractNode): List<AbstractNode> = (allNodes - sender).filter { !it.isBufferFull() }
+                    override fun onReceiverSelected(receiver: AbstractNode, sender: AbstractNode) {}
                 }
             }
 
         fun createNetworkSingleReceiveMessage(allNodes: List<AbstractNode>, network: RandomNetwork): ReceiveNodeSelectorStrategy =
             ReceiveNodeSelectorStrategy {
                 val nodeToIndex = allNodes.indices.associateBy { allNodes[it] }
-                val receivingNodes = mutableSetOf<AbstractNode>()
                 fun nodePeers(node: AbstractNode) = network.connections[nodeToIndex[node]]!!.map { allNodes[it] }
                 object : ReceiveNodeSelector {
                     override fun selectReceivingNodeCandidates(sender: AbstractNode): List<AbstractNode> =
-                        nodePeers(sender) - receivingNodes
-                    override fun onReceiverSelected(receiver: AbstractNode, sender: AbstractNode) {
-                        receivingNodes += receiver
-                    }
+                        nodePeers(sender).filter { !it.isBufferFull() }
+                    override fun onReceiverSelected(receiver: AbstractNode, sender: AbstractNode) {}
                 }
             }
     }

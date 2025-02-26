@@ -88,6 +88,7 @@ data class SimConfig(
     val nodeCount: Int = 1000,
     val peerCount: Int,
     val isGodStopMode: Boolean,
+    val messageBufferSize: Int = 0,
     val randomSeed: Long = 0,
 ) {
     companion object {
@@ -99,6 +100,7 @@ data class SimConfig(
                 cfg.nodeCount,
                 cfg.peerCount,
                 cfg.isGodStopMode,
+                cfg.params.messageBufferSize,
                 cfg.randomSeed
             )
         fun fromPotuzSimulationConfigRow(cfg: DataRow<PotuzSimulationConfig>) =
@@ -109,6 +111,7 @@ data class SimConfig(
                 cfg.nodeCount,
                 cfg.peerCount,
                 cfg.isGodStopMode,
+                cfg.params.messageBufferSize,
                 cfg.randomSeed
             )
     }

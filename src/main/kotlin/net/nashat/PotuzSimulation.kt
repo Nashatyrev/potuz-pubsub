@@ -1,10 +1,8 @@
 package net.nashat
 
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.jetbrains.kotlinx.dataframe.DataFrame
-import org.jetbrains.kotlinx.dataframe.annotations.DataSchema
 import org.jetbrains.kotlinx.dataframe.api.print
 import org.jetbrains.kotlinx.dataframe.api.toDataFrame
 import java.util.concurrent.atomic.AtomicInteger
@@ -12,7 +10,8 @@ import kotlin.random.Random
 
 fun main() {
 //    runAll()
-    noErasureCodingDispersionTest()
+//    noErasureCodingDispersionTest()
+    mainTest()
 }
 
 fun runAll() {
@@ -101,12 +100,12 @@ fun noErasureCodingDispersionTest() {
 
 fun mainTest() {
     val cfg = PotuzSimulationConfig(
-        params = PotuzParams(100, rsParams = RSParams(1, false)),
-        peerCount = 20,
+        params = PotuzParams(20, rsParams = RSParams(1, false)),
+        peerCount = 10,
         isGodStopMode = true
     )
 
-    PotuzSimulation(cfg, logEveryRound = true).run()
+    PotuzSimulation(cfg, withChunkDistribution = true, logEveryRound = true).run()
 }
 
 class PotuzSimulation(
@@ -142,7 +141,7 @@ class PotuzSimulation(
 
                 nodes = List(config.nodeCount) { index -> RsNode(index, rnd, config.params, chunkMeshes) }
                 network = RandomNetwork.createAllToAll(config.nodeCount)
-                nodeSelectorStrategy = ReceiveNodeSelectorStrategy.createRandomSingleReceiveMessage(nodes, rnd)
+                nodeSelectorStrategy = ReceiveNodeSelectorStrategy.createRandomSingleReceiveMessage(nodes)
             }
 
             else -> throw NotImplementedError()
@@ -159,15 +158,18 @@ class PotuzSimulation(
             val receiverCandidates = nodeSelector.selectReceivingNodeCandidates(sender)
             sender.generateNewMessage(receiverCandidates)?.also { msg ->
                 nodeSelector.onReceiverSelected(msg.to, msg.from)
+                msg.to.bufferInboundMessage(msg, round)
             }
         }
-        for (idx in messages.indices) {
-            val msg = messages[idx]
-            if (msg != null) {
-                val sender = nodes[idx]
-                msg.to.receive(msg, round)
-            }
-        }
+        nodes.forEach { it.processSingleBufferedMessage(round) }
+//        for (idx in messages.indices) {
+//            val msg = messages[idx]
+//            if (msg != null) {
+//                val sender = nodes[idx]
+//                msg.to.receive(msg, round)
+//            }
+//        }
+
         round++
         val msgCount = messages.count { it != null }
         return msgCount
@@ -189,7 +191,7 @@ class PotuzSimulation(
             .groupBy { setOf(it.msg.from, it.msg.to) }
 
     fun getAllMessagesForRound(round: Int) =
-        nodes.flatMap { it.receivedMessages.filter { it.hop == round } }
+        nodes.flatMap { it.receivedMessages.filter { it.sentRound == round } }
 
     fun getDuplicateOneConnectionMessagesForRound(round: Int) =
         getAllMessagesForRound(round)
@@ -248,6 +250,8 @@ class PotuzSimulation(
 
             duplicateOneConnectionMessagesAccum += getDuplicateOneConnectionMessagesForRound(round - 1).size
 
+            val chunkDistr = if (withChunkDistribution) chunkDistribution() else emptyList()
+
             rows += CoreResult(
                 receivedNodeCount,
                 activeNodeCount,
@@ -255,7 +259,7 @@ class PotuzSimulation(
                 duplicateMessageCount,
                 duplicateMessageBeforeRecoverCount,
                 duplicateOneConnectionMessagesAccum,
-                chunkDistribution()
+                chunkDistr
             )
 
             if (logEveryRound) {

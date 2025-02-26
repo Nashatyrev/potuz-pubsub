@@ -119,8 +119,8 @@ class RsNode(index: Int, rnd: Random, params: PotuzParams, chunkMeshes: List<Ran
         return null
     }
 
-    override fun receive(msg: PotuzMessage, hop: Int) {
-        super.receive(msg, hop)
-        receivedVectorIdCount.compute(msg.descriptor.originalVectorId!!) { _, old -> (old ?: 0) + 1 }
+    override fun receive(bufMsg: BufferedMessage, currentHop: Int) {
+        super.receive(bufMsg, currentHop)
+        receivedVectorIdCount.compute(bufMsg.msg.descriptor.originalVectorId!!) { _, old -> (old ?: 0) + 1 }
     }
 }

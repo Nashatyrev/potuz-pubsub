@@ -11,15 +11,22 @@ abstract class AbstractNode(
 
     data class ReceivedMessage(
         val msg: PotuzMessage,
-        val hop: Int,
+        val sentRound: Int,
+        val receiveRound: Int,
         val isNew: Boolean,
         val isRecovered: Boolean,
+    )
+
+    data class BufferedMessage(
+        val msg: PotuzMessage,
+        val sentRound: Int,
     )
 
     var currentMartix = CoefMatrix.EMPTY
     var coefDescriptors = mutableListOf<CoefVectorDescriptor>()
     val receivedMessages = mutableListOf<ReceivedMessage>()
     val seenVectorsByPeer = mutableMapOf<AbstractNode, CoefMatrix>()
+    val inboundMessageBuffer = ArrayDeque<BufferedMessage>()
 
     abstract fun makePublisher();
     abstract fun handleRecovered();
@@ -28,6 +35,7 @@ abstract class AbstractNode(
     fun getChunksCount() = min(currentMartix.coefVectors.size, params.numberOfChunks)
     fun isRecovered() = getChunksCount() >= params.numberOfChunks
     fun isActive() = getChunksCount() > 0
+    fun isBufferFull() = inboundMessageBuffer.size == params.messageBufferSize
 
     protected fun addSeenVectorForPeer(peer: AbstractNode, vec: CoefVector) {
         seenVectorsByPeer.compute(peer) { _, matrix ->
@@ -40,16 +48,26 @@ abstract class AbstractNode(
 
     fun doNothing() {}
 
-    open fun receive(msg: PotuzMessage, hop: Int) {
+    fun bufferInboundMessage(msg: PotuzMessage, currentHop: Int) {
+        require(!isBufferFull())
+        inboundMessageBuffer += BufferedMessage(msg, currentHop)
+    }
+
+    fun processSingleBufferedMessage(currentHop: Int) {
+        inboundMessageBuffer.removeFirstOrNull()
+            ?.also { receive(it, currentHop) }
+    }
+
+    protected open fun receive(bufMsg: BufferedMessage, currentHop: Int) {
         val isNew: Boolean
 
         if (!isRecovered()) {
-            if (msg.coefs !in currentMartix.coefVectors) {
-                val newMatrix = currentMartix + msg.coefs
+            if (bufMsg.msg.coefs !in currentMartix.coefVectors) {
+                val newMatrix = currentMartix + bufMsg.msg.coefs
                 isNew = newMatrix.rank > currentMartix.rank
                 if (isNew) {
                     currentMartix = newMatrix
-                    coefDescriptors += msg.descriptor
+                    coefDescriptors += bufMsg.msg.descriptor
 
                     if (isRecovered()) {
                         handleRecovered()
@@ -61,8 +79,8 @@ abstract class AbstractNode(
         } else {
             isNew = false
         }
-        receivedMessages += ReceivedMessage(msg, hop, isNew, isRecovered())
-        addSeenVectorForPeer(msg.from, msg.coefs)
+        receivedMessages += ReceivedMessage(bufMsg.msg, bufMsg.sentRound, currentHop, isNew, isRecovered())
+        addSeenVectorForPeer(bufMsg.msg.from, bufMsg.msg.coefs)
     }
 
     override fun toString(): String {

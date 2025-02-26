@@ -16,8 +16,9 @@ data class PotuzParams(
     val rsParams: RSParams? = null,
     val rlncParams: RLNCParams? = null,
     val pPrime: String = PRIME_2_IN_8_PLUS_1,
-    val chunkSelectionStrategy: ChunkSelectionStrategy = ChunkSelectionStrategy.Random
-) {
+    val chunkSelectionStrategy: ChunkSelectionStrategy = ChunkSelectionStrategy.Random,
+    val messageBufferSize: Int = 1,
+    ) {
     @Transient
     val maxMultiplier = try {
         pPrime.toLong() - 1
