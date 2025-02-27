@@ -36,6 +36,7 @@ abstract class AbstractNode(
     fun isRecovered() = getChunksCount() >= params.numberOfChunks
     fun isActive() = getChunksCount() > 0
     fun isBufferFull() = inboundMessageBuffer.size == params.messageBufferSize
+    fun isCongested() = inboundMessageBuffer.size >= params.messageBufferSize - 1
 
     protected fun addSeenVectorForPeer(peer: AbstractNode, vec: CoefVector) {
         seenVectorsByPeer.compute(peer) { _, matrix ->

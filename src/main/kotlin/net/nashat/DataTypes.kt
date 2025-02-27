@@ -23,8 +23,9 @@ data class CoreResult(
     val totalMsgCnt: Int,
     val dupMsgCnt: Int,
     val dupBeforeDone: Int,
-    val dupOneConn: Int,
-    val chunkDistribution: List<Int>
+    val dupOnFly: Int,
+    val chunkDistribution: List<Int>,
+    val congestedNodeCount: Int
 )
 
 @DataSchema

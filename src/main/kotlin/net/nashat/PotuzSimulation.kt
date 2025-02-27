@@ -100,12 +100,18 @@ fun noErasureCodingDispersionTest() {
 
 fun mainTest() {
     val cfg = PotuzSimulationConfig(
-        params = PotuzParams(20, rsParams = RSParams(1, false)),
-        peerCount = 10,
+        params = PotuzParams(
+            numberOfChunks = 50,
+            chunkSelectionStrategy = ChunkSelectionStrategy.Random,
+//            rsParams = RSParams(2, true),
+            rlncParams = RLNCParams(),
+            messageBufferSize = 20
+        ),
+        peerCount = 40,
         isGodStopMode = true
     )
 
-    PotuzSimulation(cfg, withChunkDistribution = true, logEveryRound = true).run()
+    PotuzSimulation(cfg, withChunkDistribution = false, logEveryRound = true).run()
 }
 
 class PotuzSimulation(
@@ -180,41 +186,32 @@ class PotuzSimulation(
         nodes.maxOfOrNull { it.receivedMessages.maxOfOrNull { it.msg.descriptor.countTreeNodes() } ?: 0 } ?: 0
 
 
-    val allMessages get() = nodes.flatMap { it.receivedMessages }
-    val totalMessageCount get() = allMessages.size
-    val duplicateMessages get() = allMessages.filter { !it.isNew }
-    val duplicateMessagesBeforeRecover get() = allMessages.filter { !it.isNew && !it.isRecovered }
-    val duplicateMessageCount get() = allMessages.count { !it.isNew }
-    val duplicateMessageBeforeRecoverCount get() = allMessages.count { !it.isNew && !it.isRecovered }
+    val allReceivedMessages get() = nodes.flatMap { it.receivedMessages }
+    val totalMessageCount get() = allReceivedMessages.size
+    val duplicateMessages get() = allReceivedMessages.filter { !it.isNew }
+    val duplicateMessagesBeforeRecover get() = allReceivedMessages.filter { !it.isNew && !it.isRecovered }
+    val duplicateMessageCount get() = allReceivedMessages.count { !it.isNew }
+    val duplicateMessageBeforeRecoverCount get() = allReceivedMessages.count { !it.isNew && !it.isRecovered }
     val messagesByConnection
-        get() = allMessages
+        get() = allReceivedMessages
             .groupBy { setOf(it.msg.from, it.msg.to) }
 
-    fun getAllMessagesForRound(round: Int) =
-        nodes.flatMap { it.receivedMessages.filter { it.sentRound == round } }
+    fun getAllReceivedMessagesInRound(round: Int) =
+        nodes.flatMap { it.receivedMessages.filter { it.receiveRound == round } }
 
-    fun getDuplicateOneConnectionMessagesForRound(round: Int) =
-        getAllMessagesForRound(round)
-            .groupBy { setOf(it.msg.from, it.msg.to) to it.msg.coefs }
-            .filter { (_, messages) ->
-                if (messages.size > 2) {
-                    throw IllegalStateException()
-                }
-                messages.size > 1
-            }
+    fun getDuplicateOneConnectionMessageCount() =
+        allReceivedMessages
+            .groupingBy { setOf(it.msg.from, it.msg.to) to it.msg.coefs }
+            .eachCount()
+            .count { (_, cnt) -> cnt > 1 }
 
-    //    val allMessagesByPeer
-//        get() =
-//            allMessages
-//                .filter { it.msg.descriptor.originalVectorId == 1 }
-//                .flatMap { listOf(it.msg.to to it, it.msg.from to it) }
-//                .groupBy { it.first }
-//                .mapValues { (_, value) -> value.map { it.second } }
     val receivedNodeCount get() = nodes.count { it.isRecovered() }
     val activeNodeCount get() = nodes.count { it.isActive() }
     val totalChunksCount get() = nodes.sumOf { it.getChunksCount() }
     val targetTotalChunksCount = config.nodeCount * config.params.numberOfChunks
     val allReceived get() = receivedNodeCount == config.nodeCount
+
+    fun getCongestedNodeCount() = nodes.count { it.isCongested() }
 
     fun chunkDistribution() =
         nodes
@@ -238,7 +235,7 @@ class PotuzSimulation(
     fun run(): DataFrame<CoreResult> {
         val rows = mutableListOf<CoreResult>()
 
-        var duplicateOneConnectionMessagesAccum = 0
+//        var duplicateOneConnectionMessagesAccum = 0
         while (true) {
             if (config.isGodStopMode && allReceived) break
 
@@ -248,7 +245,7 @@ class PotuzSimulation(
                 break
             }
 
-            duplicateOneConnectionMessagesAccum += getDuplicateOneConnectionMessagesForRound(round - 1).size
+//            duplicateOneConnectionMessagesAccum += getDuplicateOneConnectionMessagesForRound(round - 1).size
 
             val chunkDistr = if (withChunkDistribution) chunkDistribution() else emptyList()
 
@@ -258,8 +255,9 @@ class PotuzSimulation(
                 totalMessageCount,
                 duplicateMessageCount,
                 duplicateMessageBeforeRecoverCount,
-                duplicateOneConnectionMessagesAccum,
-                chunkDistr
+                getDuplicateOneConnectionMessageCount(),
+                chunkDistr,
+                getCongestedNodeCount()
             )
 
             if (logEveryRound) {
