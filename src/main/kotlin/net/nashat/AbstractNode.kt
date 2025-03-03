@@ -36,7 +36,12 @@ abstract class AbstractNode(
     fun isRecovered() = getChunksCount() >= params.numberOfChunks
     fun isActive() = getChunksCount() > 0
     fun isBufferFull() = inboundMessageBuffer.size == params.messageBufferSize
-    fun isCongested() = inboundMessageBuffer.size >= params.messageBufferSize - 1
+    fun isCongested() = inboundMessageBuffer.size >= params.messageBufferSize
+    fun getOriginalVectorIds() =
+        coefDescriptors
+            .map { it.originalVectorIds }
+            .reduceOrNull { acc, ints -> acc + ints }
+            ?: emptySet()
 
     protected fun addSeenVectorForPeer(peer: AbstractNode, vec: CoefVector) {
         seenVectorsByPeer.compute(peer) { _, matrix ->
@@ -54,9 +59,14 @@ abstract class AbstractNode(
         inboundMessageBuffer += BufferedMessage(msg, currentHop)
     }
 
-    fun processSingleBufferedMessage(currentHop: Int) {
-        inboundMessageBuffer.removeFirstOrNull()
-            ?.also { receive(it, currentHop) }
+    fun processBufferedMessages(currentRound: Int) {
+        generateSequence { inboundMessageBuffer.firstOrNull() }
+            .takeWhile { currentRound - it.sentRound >= params.latencyRounds }
+            .take(params.maxRoundReceiveMessageCnt)
+            .map { inboundMessageBuffer.removeFirst() }
+            .forEach {
+                receive(it, currentRound)
+            }
     }
 
     protected open fun receive(bufMsg: BufferedMessage, currentHop: Int) {

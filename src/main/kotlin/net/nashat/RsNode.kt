@@ -58,33 +58,70 @@ class RsNode(index: Int, rnd: Random, params: PotuzParams, chunkMeshes: List<Ran
                                 coefDescriptors[it].originalVectorId
                             }
                         )
+
+                ChunkSelectionStrategy.PreferLaterThenRandom -> {
+                    val latestPreferIndexes = currentMartix.coefVectors.indices
+                        .sortedByDescending { coefDescriptors[it].originalVectorId }
+                    if (coefDescriptors[latestPreferIndexes.first()].originalVectorId == params.numberOfChunks - 1) {
+                        // we've got the latest chunk, let's do random now
+                        currentMartix.coefVectors.indices.shuffled(rnd)
+                    } else {
+                        latestPreferIndexes
+                    }
+                }
+
+                ChunkSelectionStrategy.PreferLaterThenRarest -> {
+                    val latestPreferIndexes = currentMartix.coefVectors.indices
+                        .sortedByDescending { coefDescriptors[it].originalVectorId }
+                    if (coefDescriptors[latestPreferIndexes.first()].originalVectorId == params.numberOfChunks - 1) {
+                        // we've got the latest chunk, let's do Rarest now
+                        currentMartix.coefVectors.indices
+                            .sortedWith(
+                                compareBy<Int> {
+                                    receivedVectorIdCount[it] ?: 0
+                                }.thenByDescending {
+                                    coefDescriptors[it].originalVectorId
+                                }
+                            )
+                    } else {
+                        latestPreferIndexes
+                    }
+                }
             }
 
-        for (existingVectorIdx in vectorCandidateIndices) {
-            val existingVector = currentMartix.coefVectors[existingVectorIdx]
+        data class SendCandidate(
+            val vectorIndex: Int,
+            val receiver: AbstractNode
+        ) {
+            val existingVector = currentMartix.coefVectors[vectorIndex]
+        }
 
-            val meshNodes = getMeshNodes(existingVectorIdx)
-            // prefer peers with less past traffic
-            val receiveCandidates = meshNodes
-                .shuffled(rnd)
-                .sortedBy { seenVectorsByPeer[it]?.rowCount ?: 0 }
-
-            val maybeReceiver = receiveCandidates.firstOrNull { receiver ->
-                !(seenVectorsByPeer[receiver]?.coefVectorsSet?.contains(existingVector) ?: false)
+        return vectorCandidateIndices
+            .asSequence() // don't want eager calculation below
+            .flatMap { vectorCandidateIndex ->
+                getMeshNodes(vectorCandidateIndex)
+                    .shuffled(rnd)
+                    // prefer peers with less past traffic
+                    .sortedBy { seenVectorsByPeer[it]?.rowCount ?: 0 }
+                    .map { receiverCandidate ->
+                        SendCandidate(vectorCandidateIndex, receiverCandidate)
+                    }
             }
-            if (maybeReceiver != null) {
+            .filter { candidate ->
+                !(seenVectorsByPeer[candidate.receiver]?.coefVectorsSet?.contains(candidate.existingVector) ?: false)
+            }
+            .firstOrNull()
+            ?.let { candidate ->
                 val msg =
                     PotuzMessage(
-                        existingVector,
-                        coefDescriptors[existingVectorIdx],
+                        candidate.existingVector,
+                        coefDescriptors[candidate.vectorIndex],
                         this,
-                        maybeReceiver
+                        candidate.receiver
                     )
-                addSeenVectorForPeer(msg.to, existingVector)
-                return msg
+                addSeenVectorForPeer(msg.to, candidate.existingVector)
+                msg
             }
-        }
-        return null
     }
 
     private var publisherIndexCounter = 0

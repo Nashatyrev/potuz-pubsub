@@ -16,27 +16,47 @@ fun interface ReceiveNodeSelectorStrategy {
         fun createRandom(allNodes: List<AbstractNode>, rnd: Random): ReceiveNodeSelectorStrategy =
             ReceiveNodeSelectorStrategy {
                 object : ReceiveNodeSelector {
-                    override fun selectReceivingNodeCandidates(sender: AbstractNode): List<AbstractNode> = allNodes - sender
+                    override fun selectReceivingNodeCandidates(sender: AbstractNode): List<AbstractNode> =
+                        allNodes - sender
+
                     override fun onReceiverSelected(receiver: AbstractNode, sender: AbstractNode) {}
                 }
             }
 
-        fun createRandomSingleReceiveMessage(allNodes: List<AbstractNode>): ReceiveNodeSelectorStrategy =
+        fun createRandomLimitedReceiveMessage(
+            allNodes: List<AbstractNode>,
+            bufMsgLimit: Int
+        ): ReceiveNodeSelectorStrategy =
             ReceiveNodeSelectorStrategy {
+                val receivingNodesMsgCount = mutableMapOf<AbstractNode, Int>()
                 object : ReceiveNodeSelector {
-                    override fun selectReceivingNodeCandidates(sender: AbstractNode): List<AbstractNode> = (allNodes - sender).filter { !it.isBufferFull() }
-                    override fun onReceiverSelected(receiver: AbstractNode, sender: AbstractNode) {}
+                    override fun selectReceivingNodeCandidates(sender: AbstractNode): List<AbstractNode> =
+                        (allNodes - sender)
+                            .filter { it.inboundMessageBuffer.size + (receivingNodesMsgCount[it] ?: 0) < bufMsgLimit }
+
+                    override fun onReceiverSelected(receiver: AbstractNode, sender: AbstractNode) {
+                        receivingNodesMsgCount.compute(receiver) { _, curVal -> (curVal ?: 0) + 1 }
+                    }
                 }
             }
 
-        fun createNetworkSingleReceiveMessage(allNodes: List<AbstractNode>, network: RandomNetwork): ReceiveNodeSelectorStrategy =
+        fun createNetworkLimitedReceiveMessage(
+            allNodes: List<AbstractNode>,
+            network: RandomNetwork,
+            bufMsgLimit: Int
+        ): ReceiveNodeSelectorStrategy =
             ReceiveNodeSelectorStrategy {
+                val receivingNodesMsgCount = mutableMapOf<AbstractNode, Int>()
                 val nodeToIndex = allNodes.indices.associateBy { allNodes[it] }
                 fun nodePeers(node: AbstractNode) = network.connections[nodeToIndex[node]]!!.map { allNodes[it] }
                 object : ReceiveNodeSelector {
                     override fun selectReceivingNodeCandidates(sender: AbstractNode): List<AbstractNode> =
-                        nodePeers(sender).filter { !it.isBufferFull() }
-                    override fun onReceiverSelected(receiver: AbstractNode, sender: AbstractNode) {}
+                        nodePeers(sender)
+                            .filter { it.inboundMessageBuffer.size + (receivingNodesMsgCount[it] ?: 0) < bufMsgLimit }
+
+                    override fun onReceiverSelected(receiver: AbstractNode, sender: AbstractNode) {
+                        receivingNodesMsgCount.compute(receiver) { _, curVal -> (curVal ?: 0) + 1 }
+                    }
                 }
             }
     }

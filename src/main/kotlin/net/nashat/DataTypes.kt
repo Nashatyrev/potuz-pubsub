@@ -25,6 +25,7 @@ data class CoreResult(
     val dupBeforeDone: Int,
     val dupOnFly: Int,
     val chunkDistribution: List<Int>,
+    val chunkCountDistribution: List<Int>,
     val congestedNodeCount: Int
 )
 
@@ -90,6 +91,8 @@ data class SimConfig(
     val peerCount: Int,
     val isGodStopMode: Boolean,
     val messageBufferSize: Int = 0,
+    val maxRoundReceiveMessageCnt: Int = 1,
+    val latencyRounds: Int = 0,
     val randomSeed: Long = 0,
 ) {
     companion object {
@@ -102,6 +105,8 @@ data class SimConfig(
                 cfg.peerCount,
                 cfg.isGodStopMode,
                 cfg.params.messageBufferSize,
+                cfg.params.maxRoundReceiveMessageCnt,
+                cfg.params.latencyRounds,
                 cfg.randomSeed
             )
         fun fromPotuzSimulationConfigRow(cfg: DataRow<PotuzSimulationConfig>) =
@@ -113,6 +118,8 @@ data class SimConfig(
                 cfg.peerCount,
                 cfg.isGodStopMode,
                 cfg.params.messageBufferSize,
+                cfg.params.maxRoundReceiveMessageCnt,
+                cfg.params.latencyRounds,
                 cfg.randomSeed
             )
     }

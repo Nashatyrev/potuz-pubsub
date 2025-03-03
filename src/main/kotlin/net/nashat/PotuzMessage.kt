@@ -28,6 +28,7 @@ data class CoefVectorDescriptor(val coefs: CoefVector, val sourceVectors: List<C
 
     val originalVectors get() = getAllOriginalVectorsRecursively().map { it.coefs }.distinct()
     val originalVectorsCount get() = originalVectors.size
+    val originalVectorIds get() = getAllOriginalVectorsRecursively().map { it.originalVectorId!! }.toSet()
 
     override fun toString(): String {
         return if(isOriginal) "$originalVectorId" else "(" + sourceVectors.joinToString { it.toString() } + ")"

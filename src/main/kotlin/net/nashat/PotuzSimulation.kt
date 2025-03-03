@@ -101,15 +101,16 @@ fun noErasureCodingDispersionTest() {
 fun mainTest() {
     val cfg = PotuzSimulationConfig(
         params = PotuzParams(
-            numberOfChunks = 50,
-            chunkSelectionStrategy = ChunkSelectionStrategy.Random,
-//            rsParams = RSParams(2, true),
+            numberOfChunks = 40,
+            messageBufferSize = 100,
+            maxRoundReceiveMessageCnt = 1,
+            latencyRounds = 0,
             rlncParams = RLNCParams(),
-            messageBufferSize = 20
         ),
-        peerCount = 40,
-        isGodStopMode = true
+        peerCount = 200,
+        isGodStopMode = true,
     )
+
 
     PotuzSimulation(cfg, withChunkDistribution = false, logEveryRound = true).run()
 }
@@ -130,9 +131,13 @@ class PotuzSimulation(
         when {
             config.params.rlncParams != null -> {
 
-                nodes = List(config.nodeCount) { index -> PotuzNode(index, rnd, config.params) }
+                nodes = List(config.nodeCount) { index -> RlncNode(index, rnd, config.params) }
                 network = RandomNetwork(config.nodeCount, config.peerCount, rnd)
-                nodeSelectorStrategy = ReceiveNodeSelectorStrategy.createNetworkSingleReceiveMessage(nodes, network)
+                nodeSelectorStrategy = ReceiveNodeSelectorStrategy.createNetworkLimitedReceiveMessage(
+                    nodes,
+                    network,
+                    config.params.messageBufferSize
+                )
             }
 
             config.params.rsParams != null -> {
@@ -147,7 +152,10 @@ class PotuzSimulation(
 
                 nodes = List(config.nodeCount) { index -> RsNode(index, rnd, config.params, chunkMeshes) }
                 network = RandomNetwork.createAllToAll(config.nodeCount)
-                nodeSelectorStrategy = ReceiveNodeSelectorStrategy.createRandomSingleReceiveMessage(nodes)
+                nodeSelectorStrategy = ReceiveNodeSelectorStrategy.createRandomLimitedReceiveMessage(
+                    nodes,
+                    config.params.messageBufferSize
+                )
             }
 
             else -> throw NotImplementedError()
@@ -156,30 +164,32 @@ class PotuzSimulation(
         nodes.first().makePublisher()
     }
 
-    var round = 0
+    var currentRound = 0
 
-    fun nextRound(): Int {
+    fun produceOutboundMessages(): List<PotuzMessage> {
         val nodeSelector = nodeSelectorStrategy.createNodeSelector()
-        val messages = nodes.shuffled(rnd).map { sender ->
-            val receiverCandidates = nodeSelector.selectReceivingNodeCandidates(sender)
-            sender.generateNewMessage(receiverCandidates)?.also { msg ->
-                nodeSelector.onReceiverSelected(msg.to, msg.from)
-                msg.to.bufferInboundMessage(msg, round)
+        return nodes
+            .shuffled(rnd)
+            .mapNotNull { sender ->
+                val receiverCandidates = nodeSelector.selectReceivingNodeCandidates(sender)
+                sender.generateNewMessage(receiverCandidates)?.also { msg ->
+                    nodeSelector.onReceiverSelected(msg.to, msg.from)
+                }
             }
+    }
+
+    fun dispatchOutboundMessages(messages: List<PotuzMessage>) {
+        messages.forEach { message ->
+            message.to.bufferInboundMessage(message, currentRound)
         }
-        nodes.forEach { it.processSingleBufferedMessage(round) }
-//        for (idx in messages.indices) {
-//            val msg = messages[idx]
-//            if (msg != null) {
-//                val sender = nodes[idx]
-//                msg.to.receive(msg, round)
-//            }
-//        }
+    }
 
-        round++
-        val msgCount = messages.count { it != null }
-        return msgCount
+    fun processBufferedMessages() {
+        nodes.forEach { it.processBufferedMessages(currentRound) }
+    }
 
+    fun turnToNextRound() {
+        currentRound++
     }
 
     fun maxTreeNodes() =
@@ -211,26 +221,24 @@ class PotuzSimulation(
     val targetTotalChunksCount = config.nodeCount * config.params.numberOfChunks
     val allReceived get() = receivedNodeCount == config.nodeCount
 
-    fun getCongestedNodeCount() = nodes.count { it.isCongested() }
-
     fun chunkDistribution() =
         nodes
-            .map {
-                it.coefDescriptors.flatMap {
-                    it.getAllOriginalVectorsRecursively().map { it.originalVectorId!! }
-                }.toSet()
-            }
-            .fold(mutableMapOf<Int, Int>()) { acc, vectorIds ->
-                vectorIds.forEach { vectorId ->
-                    acc.compute(vectorId) { _, oldCount ->
-                        (oldCount ?: 0) + 1
-                    }
-                }
-                acc
-            }
+            .flatMap { it.getOriginalVectorIds() }
+            .groupingBy { it }
+            .eachCount()
             .let { map ->
                 List(map.keys.max() + 1) { map[it] ?: 0 }
             }
+
+    fun chunkCountDistribution() =
+        nodes
+            .map { it.getChunksCount() }
+            .groupingBy { it }
+            .eachCount()
+            .let { map ->
+                List(map.keys.max() + 1) { map[it] ?: 0 }
+            }
+
 
     fun run(): DataFrame<CoreResult> {
         val rows = mutableListOf<CoreResult>()
@@ -239,11 +247,17 @@ class PotuzSimulation(
         while (true) {
             if (config.isGodStopMode && allReceived) break
 
-            val messageCount = nextRound()
-
-            if (messageCount == 0) {
+            val outboundMessages = produceOutboundMessages()
+            if (outboundMessages.isEmpty()) {
                 break
             }
+
+            dispatchOutboundMessages(outboundMessages)
+
+            val congestedNodeCount = nodes.count { it.isCongested() }
+
+            processBufferedMessages()
+            turnToNextRound()
 
 //            duplicateOneConnectionMessagesAccum += getDuplicateOneConnectionMessagesForRound(round - 1).size
 
@@ -257,13 +271,14 @@ class PotuzSimulation(
                 duplicateMessageBeforeRecoverCount,
                 getDuplicateOneConnectionMessageCount(),
                 chunkDistr,
-                getCongestedNodeCount()
+                chunkCountDistribution(),
+                congestedNodeCount
             )
 
             if (logEveryRound) {
                 val totalNonDupRequired = (nodes.size - 1) * config.params.numberOfChunks
                 val nonDupDone = totalMessageCount - duplicateMessageCount
-                println("$round: $nonDupDone/$totalNonDupRequired, ${rows.last()}")
+                println("$currentRound: $nonDupDone/$totalNonDupRequired, ${rows.last()}")
             }
         }
 

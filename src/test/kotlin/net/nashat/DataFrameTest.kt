@@ -65,7 +65,7 @@ class DataFrameTest {
             peerCount = 50,
             isGodStopMode = false
         )
-        val res = CoreResult(1, 2, 3, 4, 5, 6, emptyList(), 0)
+        val res = CoreResult(1, 2, 3, 4, 5, 6, emptyList(), emptyList(), 0)
         val df = listOf(res).toDataFrame()
 
         val writer = buf.writer()
