@@ -17,6 +17,11 @@ abstract class AbstractNode(
         val isRecovered: Boolean,
     )
 
+    data class SentMessage(
+        val msg: PotuzMessage,
+        val sentRound: Int,
+    )
+
     data class BufferedMessage(
         val msg: PotuzMessage,
         val sentRound: Int,
@@ -25,12 +30,16 @@ abstract class AbstractNode(
     var currentMartix = CoefMatrix.EMPTY
     var coefDescriptors = mutableListOf<CoefVectorDescriptor>()
     val receivedMessages = mutableListOf<ReceivedMessage>()
+    val receivedMessagesByPeer =
+        mutableMapOf<AbstractNode, MutableList<ReceivedMessage>>()
+    val sentMessages = mutableListOf<SentMessage>()
+    val sentMessagesByPeer =
+        mutableMapOf<AbstractNode, MutableList<SentMessage>>()
     val seenVectorsByPeer = mutableMapOf<AbstractNode, CoefMatrix>()
     val inboundMessageBuffer = ArrayDeque<BufferedMessage>()
 
     abstract fun makePublisher();
     abstract fun handleRecovered();
-    abstract fun generateNewMessage(peers: Collection<AbstractNode>): PotuzMessage?
 
     fun getChunksCount() = min(currentMartix.coefVectors.size, params.numberOfChunks)
     fun isRecovered() = getChunksCount() >= params.numberOfChunks
@@ -52,6 +61,17 @@ abstract class AbstractNode(
         }
     }
 
+    protected fun recordReceivedMessage(receivedMsg: ReceivedMessage) {
+        receivedMessages += receivedMsg
+        receivedMessagesByPeer.computeIfAbsent(receivedMsg.msg.from) { mutableListOf() } += receivedMsg
+        addSeenVectorForPeer(receivedMsg.msg.from, receivedMsg.msg.coefs)
+    }
+
+    protected fun recordSentMessage(sentMsg: SentMessage) {
+        sentMessages += sentMsg
+        sentMessagesByPeer.computeIfAbsent(sentMsg.msg.to) { mutableListOf() } += sentMsg
+    }
+
     fun doNothing() {}
 
     fun bufferInboundMessage(msg: PotuzMessage, currentHop: Int) {
@@ -68,6 +88,14 @@ abstract class AbstractNode(
                 receive(it, currentRound)
             }
     }
+
+    fun generateNewMessage(peers: Collection<AbstractNode>, currentRound: Int): PotuzMessage? {
+        return generateNewMessageImpl(peers)?.also {
+            recordSentMessage(SentMessage(it, currentRound))
+        }
+    }
+
+    protected abstract fun generateNewMessageImpl(peers: Collection<AbstractNode>): PotuzMessage?
 
     protected open fun receive(bufMsg: BufferedMessage, currentHop: Int) {
         val isNew: Boolean
@@ -90,22 +118,33 @@ abstract class AbstractNode(
         } else {
             isNew = false
         }
-        receivedMessages += ReceivedMessage(bufMsg.msg, bufMsg.sentRound, currentHop, isNew, isRecovered())
-        addSeenVectorForPeer(bufMsg.msg.from, bufMsg.msg.coefs)
+        recordReceivedMessage(
+            ReceivedMessage(
+                msg = bufMsg.msg,
+                sentRound = bufMsg.sentRound,
+                receiveRound = currentHop,
+                isNew = isNew,
+                isRecovered = isRecovered()
+            )
+        )
     }
 
-    override fun toString(): String {
-        return "$index"
+    protected fun List<AbstractNode>.prioritizeReceiveCandidates() =
+        prioritizeReceivePeerCandidates(this)
+
+    private fun prioritizeReceivePeerCandidates(peers: List<AbstractNode>): List<AbstractNode> {
+        return when (params.peerSelectionStrategy) {
+            PeerSelectionStrategy.Random -> peers
+            PeerSelectionStrategy.LessOutboundThenInboundTraffic -> {
+                peers.sortedWith(
+                    compareBy<AbstractNode> { sentMessagesByPeer[it]?.size ?: 0 }
+                        .thenBy { receivedMessagesByPeer[it]?.size ?: 0 }
+                )
+            }
+        }
     }
 
-    override fun equals(other: Any?): Boolean {
-        if (this === other) return true
-        if (javaClass != other?.javaClass) return false
-        other as AbstractNode
-        return index == other.index
-    }
-
-    override fun hashCode(): Int {
-        return index
-    }
+    override fun toString() = "$index"
+    override fun equals(other: Any?) = index == (other as? AbstractNode)?.index
+    override fun hashCode() = index
 }

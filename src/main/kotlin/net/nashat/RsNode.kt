@@ -29,7 +29,7 @@ class RsNode(index: Int, rnd: Random, params: PotuzParams, chunkMeshes: List<Ran
         makePublisher()
     }
 
-    override fun generateNewMessage(peers: Collection<AbstractNode>): PotuzMessage? {
+    override fun generateNewMessageImpl(peers: Collection<AbstractNode>): PotuzMessage? {
         if (getChunksCount() == 0) return null
         if (isRecovered()) return generateNewMessageWithoutPartialExtensionForPublisher(peers)
 
@@ -41,7 +41,7 @@ class RsNode(index: Int, rnd: Random, params: PotuzParams, chunkMeshes: List<Ran
 
         // prefer later (and thus more rare) vectors
         val vectorCandidateIndices =
-            when (params.chunkSelectionStrategy) {
+            when (rsParams.chunkSelectionStrategy) {
                 ChunkSelectionStrategy.PreferLater ->
                     currentMartix.coefVectors.indices
                         .sortedByDescending { coefDescriptors[it].originalVectorId }
@@ -138,7 +138,8 @@ class RsNode(index: Int, rnd: Random, params: PotuzParams, chunkMeshes: List<Ran
             val existingVector = currentMartix.coefVectors[existingVectorIdx]
             val receiveCandidates = getMeshNodes(existingVectorIdx)
                 .shuffled(rnd)
-                .sortedBy { seenVectorsByPeer[it]?.rowCount ?: 0 }
+                .prioritizeReceiveCandidates()
+//                .sortedBy { seenVectorsByPeer[it]?.rowCount ?: 0 }
             for (receiveCandidate in receiveCandidates) {
                 if (!(seenVectorsByPeer[receiveCandidate]?.coefVectors?.contains(existingVector) ?: false)) {
                     val msg =

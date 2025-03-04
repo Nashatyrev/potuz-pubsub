@@ -3,6 +3,7 @@ package net.nashat
 import org.jlinalg.Matrix
 import org.jlinalg.Vector
 import org.jlinalg.field_p.FieldPFactoryMap
+import org.junit.jupiter.api.Test
 import kotlin.random.Random
 
 
@@ -11,6 +12,7 @@ class SomeTests {
     val random = Random(1)
     val maxRandomCoef = 1024L
 
+    @Test
     fun test1() {
 
         val dataCount = 4
@@ -38,6 +40,7 @@ class SomeTests {
 
     }
 
+    @Test
     fun jlinalgTest() {
         val rnd = Random(0)
 //        val fieldPrime = 3037000500L - 1

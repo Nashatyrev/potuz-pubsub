@@ -146,8 +146,11 @@ class PotuzDataFrameTest {
         val cfg = PotuzSimulationConfig(
             params = PotuzParams(
                 numberOfChunks = 10,
-                chunkSelectionStrategy = ChunkSelectionStrategy.PreferRarest,
-                rsParams = RSParams(1, true)
+                rsParams = RSParams(
+                    extensionFactor = 1,
+                    isDistinctMeshesPerChunk = true,
+                    chunkSelectionStrategy = ChunkSelectionStrategy.PreferRarest,
+                )
             ),
             peerCount = 10,
             isGodStopMode = true

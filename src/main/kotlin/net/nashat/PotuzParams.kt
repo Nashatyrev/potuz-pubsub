@@ -35,18 +35,24 @@ enum class ChunkSelectionStrategy {
     PreferLaterThenRarest
 }
 
+enum class PeerSelectionStrategy {
+
+    Random,
+
+    LessOutboundThenInboundTraffic
+}
+
 @DataSchema
 @Serializable
 data class PotuzParams(
     val numberOfChunks: Int,
-//    val erasureParams: ErasureParams,
     val rsParams: RSParams? = null,
     val rlncParams: RLNCParams? = null,
     val pPrime: String = PRIME_2_IN_8_PLUS_1,
-    val chunkSelectionStrategy: ChunkSelectionStrategy = ChunkSelectionStrategy.Random,
     val messageBufferSize: Int = 1,
     val maxRoundReceiveMessageCnt: Int = 1,
-    val latencyRounds: Int = 0
+    val latencyRounds: Int = 0,
+    val peerSelectionStrategy: PeerSelectionStrategy = PeerSelectionStrategy.Random,
     ) {
     @Transient
     val maxMultiplier = try {
@@ -70,7 +76,8 @@ data class PotuzParams(
 @Serializable
 data class RSParams(
     val extensionFactor: Int,
-    val isDistinctMeshesPerChunk: Boolean
+    val isDistinctMeshesPerChunk: Boolean,
+    val chunkSelectionStrategy: ChunkSelectionStrategy = ChunkSelectionStrategy.Random,
 )
 
 @DataSchema

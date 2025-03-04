@@ -87,6 +87,7 @@ data class SimConfig(
     val erasure: Erasure,
     val numberOfChunks: Int,
     val chunkSelectionStrategy: ChunkSelectionStrategy,
+    val peerSelectionStrategy: PeerSelectionStrategy,
     val nodeCount: Int = 1000,
     val peerCount: Int,
     val isGodStopMode: Boolean,
@@ -100,7 +101,8 @@ data class SimConfig(
             SimConfig(
                 Erasure.fromColumns(cfg.params.rsParams?.extensionFactor, cfg.params.rsParams?.isDistinctMeshesPerChunk, cfg.params.rlncParams?.dummy),
                 cfg.params.numberOfChunks,
-                cfg.params.chunkSelectionStrategy,
+                cfg.params.rsParams?.chunkSelectionStrategy ?: ChunkSelectionStrategy.Random,
+                cfg.params.peerSelectionStrategy,
                 cfg.nodeCount,
                 cfg.peerCount,
                 cfg.isGodStopMode,
@@ -113,7 +115,8 @@ data class SimConfig(
             SimConfig(
                 Erasure.fromColumns(cfg.params.rsParams.extensionFactor, cfg.params.rsParams.isDistinctMeshesPerChunk, cfg.params.rlncParams.dummy),
                 cfg.params.numberOfChunks,
-                cfg.params.chunkSelectionStrategy,
+                cfg.params.rsParams.chunkSelectionStrategy ?: ChunkSelectionStrategy.Random,
+                cfg.params.peerSelectionStrategy,
                 cfg.nodeCount,
                 cfg.peerCount,
                 cfg.isGodStopMode,

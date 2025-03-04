@@ -16,7 +16,7 @@ class RlncNode(index: Int, rnd: Random, params: PotuzParams) : AbstractNode(inde
                 .toMutableList()
     }
 
-    override fun generateNewMessage(peers: Collection<AbstractNode>): PotuzMessage? {
+    override fun generateNewMessageImpl(peers: Collection<AbstractNode>): PotuzMessage? {
         var origVectorId: Int? = null;
         val newChunk = when (currentMartix.coefVectors.size) {
             0 -> return null
@@ -38,6 +38,7 @@ class RlncNode(index: Int, rnd: Random, params: PotuzParams) : AbstractNode(inde
         }
         val receivePeer: AbstractNode = peers
             .shuffled(rnd)
+            .prioritizeReceiveCandidates()
 //            .sortedBy { seenVectorsByPeer[it]?.rank ?: 0 }
             .firstOrNull { receiver ->
                 seenVectorsByPeer[receiver]?.let { seenVectors ->
