@@ -4,7 +4,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.random.Random
 
-class RandomNetwork(
+class RandomNetworkGenerator(
     val totalNodeCount: Int,
     val peerCount: Int,
     val rnd: Random,
@@ -13,11 +13,14 @@ class RandomNetwork(
 
     var missCounter = 0
 
-    fun generateAllToAll(): Map<Int, Set<Int>> {
-        return (0 until totalNodeCount).map { n1 -> n1 to (0 until totalNodeCount).filter { n2 -> n1 != n2 }.toSet() }.toMap()
+    fun generate() = RandomNetwork(generateConnections())
+
+    private fun generateAllToAll(): Map<Int, Set<Int>> {
+        return (0 until totalNodeCount).map { n1 -> n1 to (0 until totalNodeCount).filter { n2 -> n1 != n2 }.toSet() }
+            .toMap()
     }
 
-    fun generateConnections(): Map<Int, Set<Int>> {
+    private fun generateConnections(): Map<Int, Set<Int>> {
         if (peerCount == totalNodeCount - 1) return generateAllToAll()
 
         val connections = (0 until totalNodeCount).map { it to mutableSetOf<Int>() }.toMap()
@@ -52,7 +55,46 @@ class RandomNetwork(
         return connections;
     }
 
-    val connections = generateConnections()
+    companion object {
+        fun createAllToAll(nodeCount: Int): RandomNetwork =
+            RandomNetworkGenerator(nodeCount, nodeCount - 1, Random(0)).generate()
+
+        fun withReducedPeerCount(network: RandomNetwork, newMinPeerCount: Int, rnd: Random): RandomNetwork {
+            require(network.minPeerConnections > newMinPeerCount)
+            val newConnections = network.connections
+                .mapValues { (_, connections) -> connections.toMutableSet() }
+                .toMutableMap()
+            val reduceCandidates = network.nodes.toMutableSet()
+            while (reduceCandidates.isNotEmpty()) {
+                val nodeCandidate = reduceCandidates.random(rnd)
+
+                if (newConnections[nodeCandidate]!!.size == newMinPeerCount) {
+                    reduceCandidates -= nodeCandidate
+                    continue
+                }
+
+                val peeCandidates = newConnections[nodeCandidate]!!
+                    .filter { peerCandidate -> newConnections[peerCandidate]!!.size > newMinPeerCount }
+
+                if (peeCandidates.isEmpty()) {
+                    reduceCandidates -= nodeCandidate
+                    continue
+                }
+
+                val peerCandidate = peeCandidates.random(rnd)
+
+                newConnections[nodeCandidate]!!.remove(peerCandidate)
+                newConnections[peerCandidate]!!.remove(nodeCandidate)
+            }
+
+            return RandomNetwork(newConnections)
+        }
+    }
+}
+
+class RandomNetwork(
+    val connections: Map<Int, Set<Int>>
+) {
     val allConnections = connections
         .flatMap { (key, value) ->
             value.map { key to it }
@@ -61,10 +103,15 @@ class RandomNetwork(
         .map { (key, value) -> min(key, value) to max(key, value) }
         .distinct()
 
+    val nodes = allDistictConnections
+        .flatMap { listOf(it.first, it.second) }
+        .distinct()
+        .sorted()
+
     val minPeerConnections = connections.values.map { it.size }.min()
     val maxPeerConnections = connections.values.map { it.size }.max()
 
-    companion object {
-        fun createAllToAll(nodeCount: Int): RandomNetwork = RandomNetwork(nodeCount, nodeCount - 1, Random(0))
+    init {
+        require(nodes == (0 until nodes.size).toList())
     }
 }

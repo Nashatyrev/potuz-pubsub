@@ -4,6 +4,8 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import org.jetbrains.kotlinx.dataframe.annotations.DataSchema
 
+const val UNLIMITED_RECEIVE_BUFFER = 1_000_000
+
 /**
  * The strategy to select a chunk from existing to propagate
  * Applicable to either No Erasure or RS erasure (not applicable to RLNC)
@@ -42,6 +44,19 @@ enum class PeerSelectionStrategy {
     LessOutboundThenInboundTraffic
 }
 
+enum class MeshStrategy {
+
+    /**
+     * Regular mesh which remains static for the whole simulation
+     */
+    Static,
+
+    /**
+     * Increased mesh in the beginning, reduced mesh when around 50% chunks are disseminated
+     */
+    TwoPhaseMesh
+}
+
 @DataSchema
 @Serializable
 data class PotuzParams(
@@ -49,11 +64,11 @@ data class PotuzParams(
     val rsParams: RSParams? = null,
     val rlncParams: RLNCParams? = null,
     val pPrime: String = PRIME_2_IN_8_PLUS_1,
-    val messageBufferSize: Int = 1,
+    val messageBufferSize: Int = UNLIMITED_RECEIVE_BUFFER,
     val maxRoundReceiveMessageCnt: Int = 1,
     val latencyRounds: Int = 0,
-    val peerSelectionStrategy: PeerSelectionStrategy = PeerSelectionStrategy.Random,
-    ) {
+    val peerSelectionStrategy: PeerSelectionStrategy = PeerSelectionStrategy.LessOutboundThenInboundTraffic,
+) {
     @Transient
     val maxMultiplier = try {
         pPrime.toLong() - 1
@@ -76,8 +91,9 @@ data class PotuzParams(
 @Serializable
 data class RSParams(
     val extensionFactor: Int,
-    val isDistinctMeshesPerChunk: Boolean,
-    val chunkSelectionStrategy: ChunkSelectionStrategy = ChunkSelectionStrategy.Random,
+    val isDistinctMeshesPerChunk: Boolean = true,
+    val chunkSelectionStrategy: ChunkSelectionStrategy = ChunkSelectionStrategy.PreferLater,
+    val meshStrategy: MeshStrategy = MeshStrategy.Static
 )
 
 @DataSchema

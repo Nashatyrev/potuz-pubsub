@@ -53,11 +53,13 @@ fun <T> DataFrame<T>.myPlotLinesWithEndingVLine(
             x(getColumn(xCol))
             y(getColumn(yCol))
             color(getColumn(groupCol))
+            width = 1.2
 
             withData(this@myPlotLinesWithEndingVLine.selectLastForEachGroup(groupCol)) {
                 vLine {
                     xIntercept(getColumn(xCol))
                     type = LineType.DOTTED
+                    width = 1.2
                     color(getColumn(groupCol))
                 }
             }

@@ -12,7 +12,7 @@ data class PotuzSimulationConfig(
     val params: PotuzParams,
     val nodeCount: Int = 1000,
     val peerCount: Int,
-    val isGodStopMode: Boolean,
+    val isGodStopMode: Boolean = true,
     val randomSeed: Long = 0,
 )
 

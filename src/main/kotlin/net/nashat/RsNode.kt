@@ -2,17 +2,19 @@ package net.nashat
 
 import kotlin.random.Random
 
-class RsNode(index: Int, rnd: Random, params: PotuzParams, chunkMeshes: List<RandomNetwork>) :
+class RsNode(index: Int, rnd: Random, params: PotuzParams, phase0ChunkMeshes: List<RandomNetwork>, val phase1ChunkMeshes: List<RandomNetwork> = emptyList()) :
     AbstractNode(index, rnd, params) {
 
     val rsParams = params.rsParams!!
     val numberOfExtendedChunks = params.numberOfChunks * rsParams.extensionFactor
-    val chunkMeshes = chunkMeshes.map { it.connections[index]!! }
     val receivedVectorIdCount = mutableMapOf<Int, Int>()
+
+    var chunkMeshes = phase0ChunkMeshes.map { it.connections[index]!! }
 
     init {
         require(chunkMeshes.size == numberOfExtendedChunks)
         require(params.rsParams != null)
+        require(rsParams.meshStrategy == MeshStrategy.Static || phase1ChunkMeshes.isNotEmpty())
     }
 
     override fun makePublisher() {
@@ -29,9 +31,20 @@ class RsNode(index: Int, rnd: Random, params: PotuzParams, chunkMeshes: List<Ran
         makePublisher()
     }
 
+    private var phase0 = true
+    fun maybeSwitchToPhase1Meshes() {
+        if (rsParams.meshStrategy == MeshStrategy.Static)
+            return
+        if (phase0 && getChunksCount() >= params.numberOfChunks / 2) {
+            phase0 = false
+            chunkMeshes = phase1ChunkMeshes.map { it.connections[index]!! }
+        }
+    }
+
     override fun generateNewMessageImpl(peers: Collection<AbstractNode>): PotuzMessage? {
         if (getChunksCount() == 0) return null
         if (isRecovered()) return generateNewMessageWithoutPartialExtensionForPublisher(peers)
+        maybeSwitchToPhase1Meshes()
 
         fun getMeshNodes(vectorIndex: Int): List<AbstractNode> {
             val chunkIndex = coefDescriptors[vectorIndex].originalVectorId!!

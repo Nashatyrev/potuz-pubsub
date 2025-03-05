@@ -105,10 +105,12 @@ fun mainTest() {
     val cfg = PotuzSimulationConfig(
         params = PotuzParams(
             numberOfChunks = 40,
-            messageBufferSize = 100,
-            maxRoundReceiveMessageCnt = 1,
-            latencyRounds = 0,
-            rlncParams = RLNCParams(),
+            latencyRounds = 10,
+            rsParams = RSParams(
+                extensionFactor = 1,
+                isDistinctMeshesPerChunk = true,
+                chunkSelectionStrategy = ChunkSelectionStrategy.PreferLater
+            )
         ),
         peerCount = 200,
         isGodStopMode = true,
@@ -135,7 +137,7 @@ class PotuzSimulation(
             config.params.rlncParams != null -> {
 
                 nodes = List(config.nodeCount) { index -> RlncNode(index, rnd, config.params) }
-                network = RandomNetwork(config.nodeCount, config.peerCount, rnd)
+                network = RandomNetworkGenerator(config.nodeCount, config.peerCount, rnd).generate()
                 nodeSelectorStrategy = ReceiveNodeSelectorStrategy.createNetworkLimitedReceiveMessage(
                     nodes,
                     network,
@@ -145,16 +147,45 @@ class PotuzSimulation(
 
             config.params.rsParams != null -> {
                 val extendedChunksCount = config.params.numberOfChunks * config.params.rsParams.extensionFactor
-                val chunkMeshes =
-                    if (config.params.rsParams.isDistinctMeshesPerChunk)
-                        List(extendedChunksCount) { RandomNetwork(config.nodeCount, config.peerCount, rnd) }
-                    else {
-                        val singleMesh = RandomNetwork(config.nodeCount, config.peerCount, rnd)
-                        List(extendedChunksCount) { singleMesh }
+                val phase0ChunkMeshes: List<RandomNetwork>
+                val phase1ChunkMeshes: List<RandomNetwork>
+                if (config.params.rsParams.isDistinctMeshesPerChunk) {
+                    phase0ChunkMeshes = List(extendedChunksCount) {
+                        RandomNetworkGenerator(
+                            config.nodeCount,
+                            config.peerCount,
+                            rnd
+                        ).generate()
                     }
+                    phase1ChunkMeshes =
+                        if (config.params.rsParams.meshStrategy == MeshStrategy.TwoPhaseMesh)
+                            phase0ChunkMeshes.map { RandomNetworkGenerator.withReducedPeerCount(it, 3, rnd) }
+                        else
+                            emptyList()
 
-                nodes = List(config.nodeCount) { index -> RsNode(index, rnd, config.params, chunkMeshes) }
-                network = RandomNetwork.createAllToAll(config.nodeCount)
+                } else {
+                    val singleMesh =
+                        RandomNetworkGenerator(config.nodeCount, config.peerCount, rnd).generate()
+                    phase0ChunkMeshes = List(extendedChunksCount) { singleMesh }
+                    if (config.params.rsParams.meshStrategy == MeshStrategy.TwoPhaseMesh) {
+                        val phase1SingleMesh =
+                            RandomNetworkGenerator.withReducedPeerCount(singleMesh, 3, rnd)
+                        phase1ChunkMeshes = List(extendedChunksCount) { phase1SingleMesh }
+                    } else {
+                        phase1ChunkMeshes = emptyList()
+                    }
+                }
+
+                nodes = List(config.nodeCount) { index ->
+                    RsNode(
+                        index,
+                        rnd,
+                        config.params,
+                        phase0ChunkMeshes,
+                        phase1ChunkMeshes
+                    )
+                }
+                network = RandomNetworkGenerator.createAllToAll(config.nodeCount)
                 nodeSelectorStrategy = ReceiveNodeSelectorStrategy.createRandomLimitedReceiveMessage(
                     nodes,
                     config.params.messageBufferSize
