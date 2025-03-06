@@ -2,26 +2,30 @@ package net.nashat
 
 import kotlin.random.Random
 
-class RsNode(index: Int, rnd: Random, params: PotuzParams, phase0ChunkMeshes: List<RandomNetwork>, val phase1ChunkMeshes: List<RandomNetwork> = emptyList()) :
-    AbstractNode(index, rnd, params) {
+class RsNode(
+    index: Int,
+    rnd: Random,
+    config: PotuzSimulationConfig,
+    phase0ChunkMeshes: List<RandomNetwork>,
+    val phase1ChunkMeshes: List<RandomNetwork> = emptyList()
+) :
+    AbstractNode(index, rnd, config) {
 
-    val rsParams = params.rsParams!!
-    val numberOfExtendedChunks = params.numberOfChunks * rsParams.extensionFactor
+    val numberOfExtendedChunks = simConfig.numberOfChunks * simConfig.erasure.extensionFactor
     val receivedVectorIdCount = mutableMapOf<Int, Int>()
 
     var chunkMeshes = phase0ChunkMeshes.map { it.connections[index]!! }
 
     init {
         require(chunkMeshes.size == numberOfExtendedChunks)
-        require(params.rsParams != null)
-        require(rsParams.meshStrategy == MeshStrategy.Static || phase1ChunkMeshes.isNotEmpty())
+        require(simConfig.rsMeshStrategy == MeshStrategy.Static || phase1ChunkMeshes.isNotEmpty())
     }
 
     override fun makePublisher() {
         val localRnd = Random(0)
         var localIdGenerator = 0
         currentMartix =
-            CoefMatrix.generate(numberOfExtendedChunks, params.numberOfChunks, localRnd, params.maxMultiplier)
+            CoefMatrix.generate(numberOfExtendedChunks, simConfig.numberOfChunks, localRnd, config.maxMultiplier)
         coefDescriptors =
             currentMartix.coefVectors.map { CoefVectorDescriptor(it, emptyList(), localIdGenerator++) }
                 .toMutableList()
@@ -33,9 +37,9 @@ class RsNode(index: Int, rnd: Random, params: PotuzParams, phase0ChunkMeshes: Li
 
     private var phase0 = true
     fun maybeSwitchToPhase1Meshes() {
-        if (rsParams.meshStrategy == MeshStrategy.Static)
+        if (simConfig.rsMeshStrategy == MeshStrategy.Static)
             return
-        if (phase0 && getChunksCount() >= params.numberOfChunks / 2) {
+        if (phase0 && getChunksCount() >= simConfig.numberOfChunks / 2) {
             phase0 = false
             chunkMeshes = phase1ChunkMeshes.map { it.connections[index]!! }
         }
@@ -54,7 +58,7 @@ class RsNode(index: Int, rnd: Random, params: PotuzParams, phase0ChunkMeshes: Li
 
         // prefer later (and thus more rare) vectors
         val vectorCandidateIndices =
-            when (rsParams.chunkSelectionStrategy) {
+            when (simConfig.rsChunkSelectionStrategy) {
                 ChunkSelectionStrategy.PreferLater ->
                     currentMartix.coefVectors.indices
                         .sortedByDescending { coefDescriptors[it].originalVectorId }
@@ -75,7 +79,7 @@ class RsNode(index: Int, rnd: Random, params: PotuzParams, phase0ChunkMeshes: Li
                 ChunkSelectionStrategy.PreferLaterThenRandom -> {
                     val latestPreferIndexes = currentMartix.coefVectors.indices
                         .sortedByDescending { coefDescriptors[it].originalVectorId }
-                    if (coefDescriptors[latestPreferIndexes.first()].originalVectorId == params.numberOfChunks - 1) {
+                    if (coefDescriptors[latestPreferIndexes.first()].originalVectorId == simConfig.numberOfChunks - 1) {
                         // we've got the latest chunk, let's do random now
                         currentMartix.coefVectors.indices.shuffled(rnd)
                     } else {
@@ -86,7 +90,7 @@ class RsNode(index: Int, rnd: Random, params: PotuzParams, phase0ChunkMeshes: Li
                 ChunkSelectionStrategy.PreferLaterThenRarest -> {
                     val latestPreferIndexes = currentMartix.coefVectors.indices
                         .sortedByDescending { coefDescriptors[it].originalVectorId }
-                    if (coefDescriptors[latestPreferIndexes.first()].originalVectorId == params.numberOfChunks - 1) {
+                    if (coefDescriptors[latestPreferIndexes.first()].originalVectorId == simConfig.numberOfChunks - 1) {
                         // we've got the latest chunk, let's do Rarest now
                         currentMartix.coefVectors.indices
                             .sortedWith(

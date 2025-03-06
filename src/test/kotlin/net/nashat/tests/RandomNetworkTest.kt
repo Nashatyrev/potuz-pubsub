@@ -1,5 +1,6 @@
-package net.nashat
+package net.nashat.tests
 
+import net.nashat.RandomNetworkGenerator
 import org.junit.jupiter.api.Test
 import kotlin.random.Random
 

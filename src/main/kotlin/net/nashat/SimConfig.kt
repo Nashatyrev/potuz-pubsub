@@ -1,6 +1,5 @@
 package net.nashat
 
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import org.jetbrains.kotlinx.dataframe.annotations.DataSchema
 
@@ -57,17 +56,40 @@ enum class MeshStrategy {
     TwoPhaseMesh
 }
 
+enum class Erasure(val extensionFactor: Int) {
+    NoErasure(1),
+    RsX2(2),
+    RsX3(3),
+    RLNC(10000)
+}
+
 @DataSchema
-@Serializable
-data class PotuzParams(
+data class SimConfig(
+    val nodeCount: Int = 1000,
+    val peerCount: Int,
     val numberOfChunks: Int,
-    val rsParams: RSParams? = null,
-    val rlncParams: RLNCParams? = null,
-    val pPrime: String = PRIME_2_IN_8_PLUS_1,
+    val latencyRounds: Int = 0,
+    val erasure: Erasure,
+    val rsIsDistinctMeshes: Boolean = true,
+    val rsChunkSelectionStrategy: ChunkSelectionStrategy = ChunkSelectionStrategy.PreferLater,
+    val rsMeshStrategy: MeshStrategy = MeshStrategy.Static,
+    val peerSelectionStrategy: PeerSelectionStrategy = PeerSelectionStrategy.LessOutboundThenInboundTraffic,
+    val randomSeed: Long = 0,
+) {
+
+    fun withOptimalMeshStrategy() = this.copy(rsMeshStrategy =
+        if (erasure == Erasure.NoErasure) MeshStrategy.TwoPhaseMesh
+        else MeshStrategy.Static
+    )
+}
+
+data class PotuzSimulationConfig(
+    val simConfig: SimConfig,
+
+    val isGodStopMode: Boolean = true,
     val messageBufferSize: Int = UNLIMITED_RECEIVE_BUFFER,
     val maxRoundReceiveMessageCnt: Int = 1,
-    val latencyRounds: Int = 0,
-    val peerSelectionStrategy: PeerSelectionStrategy = PeerSelectionStrategy.LessOutboundThenInboundTraffic,
+    val pPrime: String = PRIME_2_IN_8_PLUS_1,
 ) {
     @Transient
     val maxMultiplier = try {
@@ -75,27 +97,4 @@ data class PotuzParams(
     } catch (e: Exception) {
         Int.MAX_VALUE.toLong()
     }
-
-    companion object {
-        fun create(numberOfChunks: Int, erasureParams: Any): PotuzParams {
-            when (erasureParams) {
-                is RSParams -> return PotuzParams(numberOfChunks, rsParams = erasureParams)
-                is RLNCParams -> return PotuzParams(numberOfChunks, rlncParams = erasureParams)
-                else -> throw IllegalArgumentException()
-            }
-        }
-    }
 }
-
-@DataSchema
-@Serializable
-data class RSParams(
-    val extensionFactor: Int,
-    val isDistinctMeshesPerChunk: Boolean = true,
-    val chunkSelectionStrategy: ChunkSelectionStrategy = ChunkSelectionStrategy.PreferLater,
-    val meshStrategy: MeshStrategy = MeshStrategy.Static
-)
-
-@DataSchema
-@Serializable
-data class RLNCParams(val dummy: Int = 0)

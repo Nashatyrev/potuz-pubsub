@@ -6,7 +6,7 @@ import kotlin.random.Random
 abstract class AbstractNode(
     val index: Int,
     val rnd: Random,
-    val params: PotuzParams,
+    val config: PotuzSimulationConfig,
 ) {
 
     data class ReceivedMessage(
@@ -38,14 +38,16 @@ abstract class AbstractNode(
     val seenVectorsByPeer = mutableMapOf<AbstractNode, CoefMatrix>()
     val inboundMessageBuffer = ArrayDeque<BufferedMessage>()
 
+    protected val simConfig get() = config.simConfig
+
     abstract fun makePublisher();
     abstract fun handleRecovered();
 
-    fun getChunksCount() = min(currentMartix.coefVectors.size, params.numberOfChunks)
-    fun isRecovered() = getChunksCount() >= params.numberOfChunks
+    fun getChunksCount() = min(currentMartix.coefVectors.size, simConfig.numberOfChunks)
+    fun isRecovered() = getChunksCount() >= simConfig.numberOfChunks
     fun isActive() = getChunksCount() > 0
-    fun isBufferFull() = inboundMessageBuffer.size == params.messageBufferSize
-    fun isCongested() = inboundMessageBuffer.size >= params.messageBufferSize
+    fun isBufferFull() = inboundMessageBuffer.size == config.messageBufferSize
+    fun isCongested() = inboundMessageBuffer.size >= config.messageBufferSize
     fun getOriginalVectorIds() =
         coefDescriptors
             .map { it.originalVectorIds }
@@ -81,8 +83,8 @@ abstract class AbstractNode(
 
     fun processBufferedMessages(currentRound: Int) {
         generateSequence { inboundMessageBuffer.firstOrNull() }
-            .takeWhile { currentRound - it.sentRound >= params.latencyRounds }
-            .take(params.maxRoundReceiveMessageCnt)
+            .takeWhile { currentRound - it.sentRound >= simConfig.latencyRounds }
+            .take(config.maxRoundReceiveMessageCnt)
             .map { inboundMessageBuffer.removeFirst() }
             .forEach {
                 receive(it, currentRound)
@@ -133,7 +135,7 @@ abstract class AbstractNode(
         prioritizeReceivePeerCandidates(this)
 
     private fun prioritizeReceivePeerCandidates(peers: List<AbstractNode>): List<AbstractNode> {
-        return when (params.peerSelectionStrategy) {
+        return when (simConfig.peerSelectionStrategy) {
             PeerSelectionStrategy.Random -> peers
             PeerSelectionStrategy.LessOutboundThenInboundTraffic -> {
                 peers.sortedWith(

@@ -4,6 +4,30 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.random.Random
 
+class RandomNetwork(
+    val connections: Map<Int, Set<Int>>
+) {
+    val allConnections = connections
+        .flatMap { (key, value) ->
+            value.map { key to it }
+        }
+    val allDistictConnections = allConnections
+        .map { (key, value) -> min(key, value) to max(key, value) }
+        .distinct()
+
+    val nodes = allDistictConnections
+        .flatMap { listOf(it.first, it.second) }
+        .distinct()
+        .sorted()
+
+    val minPeerConnections = connections.values.map { it.size }.min()
+    val maxPeerConnections = connections.values.map { it.size }.max()
+
+    init {
+        require(nodes == (0 until nodes.size).toList())
+    }
+}
+
 class RandomNetworkGenerator(
     val totalNodeCount: Int,
     val peerCount: Int,
@@ -89,29 +113,5 @@ class RandomNetworkGenerator(
 
             return RandomNetwork(newConnections)
         }
-    }
-}
-
-class RandomNetwork(
-    val connections: Map<Int, Set<Int>>
-) {
-    val allConnections = connections
-        .flatMap { (key, value) ->
-            value.map { key to it }
-        }
-    val allDistictConnections = allConnections
-        .map { (key, value) -> min(key, value) to max(key, value) }
-        .distinct()
-
-    val nodes = allDistictConnections
-        .flatMap { listOf(it.first, it.second) }
-        .distinct()
-        .sorted()
-
-    val minPeerConnections = connections.values.map { it.size }.min()
-    val maxPeerConnections = connections.values.map { it.size }.max()
-
-    init {
-        require(nodes == (0 until nodes.size).toList())
     }
 }

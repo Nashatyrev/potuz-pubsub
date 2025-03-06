@@ -3,12 +3,18 @@
     "https://raw.githubusercontent.com/Kotlin/dataframe/master/data/jetbrains_repositories.csv",
 )
 
-package net.nashat
+package net.nashat.experiments
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import net.nashat.CoreResult
+import net.nashat.Erasure
+import net.nashat.PotuzIO
+import net.nashat.PotuzSimulationConfig
+import net.nashat.SimConfig
+import net.nashat.dump
+import net.nashat.foldToObject
 import org.jetbrains.kotlinx.dataframe.DataFrame
-import org.jetbrains.kotlinx.dataframe.DataRow
 import org.jetbrains.kotlinx.dataframe.annotations.DataSchema
 import org.jetbrains.kotlinx.dataframe.annotations.ImportDataSchema
 import org.jetbrains.kotlinx.dataframe.api.JoinType
@@ -20,13 +26,12 @@ import org.jetbrains.kotlinx.dataframe.api.dataFrameOf
 import org.jetbrains.kotlinx.dataframe.api.describe
 import org.jetbrains.kotlinx.dataframe.api.fillNulls
 import org.jetbrains.kotlinx.dataframe.api.getColumn
-import org.jetbrains.kotlinx.dataframe.api.getColumnGroup
-import org.jetbrains.kotlinx.dataframe.api.inferType
+import org.jetbrains.kotlinx.dataframe.api.groupBy
 import org.jetbrains.kotlinx.dataframe.api.into
 import org.jetbrains.kotlinx.dataframe.api.join
+import org.jetbrains.kotlinx.dataframe.api.named
 import org.jetbrains.kotlinx.dataframe.api.prev
 import org.jetbrains.kotlinx.dataframe.api.rename
-import org.jetbrains.kotlinx.dataframe.api.rows
 import org.jetbrains.kotlinx.dataframe.api.sortBy
 import org.jetbrains.kotlinx.dataframe.api.toDataFrame
 import org.jetbrains.kotlinx.dataframe.api.unfold
@@ -56,30 +61,35 @@ class DataFrameTest {
     fun testJsonSerialize() {
         val buf = ByteArrayOutputStream()
         val cfg1 = PotuzSimulationConfig(
-            params = PotuzParams(10, rlncParams = RLNCParams()),
-            peerCount = 40,
-            isGodStopMode = true
+            SimConfig(
+                erasure = Erasure.RLNC,
+                peerCount = 40,
+                numberOfChunks = 10
+            )
         )
         val cfg2 = PotuzSimulationConfig(
-            params = PotuzParams(20, rsParams = RSParams(2, true)),
-            peerCount = 50,
-            isGodStopMode = false
+            SimConfig(
+                erasure = Erasure.RsX2,
+                peerCount = 40,
+                numberOfChunks = 10
+            )
         )
         val res = CoreResult(1, 2, 3, 4, 5, 6, emptyList(), emptyList(), 0)
         val df = listOf(res).toDataFrame()
 
         val writer = buf.writer()
-        PotuzIO().writeResultsToJson(
-            writer,
-            listOf(cfg1, cfg2), listOf(df, df)
-        )
-        writer.flush()
-
-        println(buf.toString(Charsets.UTF_8))
-
-        val fromJson = PotuzIO().readResultsFromJson(ByteArrayInputStream(buf.toByteArray()))
-
-        println(fromJson)
+//        PotuzIO().writeResultsToJson(
+//            writer,
+//
+//            listOf(cfg1, cfg2), listOf(df, df)
+//        )
+//        writer.flush()
+//
+//        println(buf.toString(Charsets.UTF_8))
+//
+//        val fromJson = PotuzIO().readResultsFromJson(ByteArrayInputStream(buf.toByteArray()))
+//
+//        println(fromJson)
     }
 
     @Test
@@ -110,6 +120,20 @@ class DataFrameTest {
             .fillNulls("data").with { prev()?.get("data") ?: 0 }
             .fillNulls("data2").with { prev()?.get("data2") ?: 0 }
         println(df3)
+    }
+
+    @Test
+    fun testExperimentsMergeByTimeIsolated() {
+        val paramCol = columnOf(1, 1, 1, 1, 1, 2, 2, 2, 2).named("param")
+        val timeCol = columnOf(0.0, 0.1, 0.5, 0.8, 1.5, 0.2, 0.5, 0.8, 1.0).named("time")
+        val valueCol = columnOf(0, 1, 2, 3, 4, 2, 3, 4, 5).named("value")
+
+        val df = dataFrameOf(paramCol, timeCol, valueCol)
+        df.dump()
+
+        val df1 = df.groupBy { paramCol }.into("group")
+        df1.dump()
+        println(df1.describe())
     }
 
     @Test

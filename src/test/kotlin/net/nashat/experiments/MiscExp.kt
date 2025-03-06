@@ -1,9 +1,9 @@
-package net.nashat
+package net.nashat.experiments
 
 import org.junit.jupiter.api.Test
 import kotlin.random.Random
 
-class MiscTests {
+class MiscExp {
 
     @Test
     fun testQueueToSequence() {

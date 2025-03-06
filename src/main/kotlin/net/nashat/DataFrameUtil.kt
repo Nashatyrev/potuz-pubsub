@@ -33,21 +33,21 @@ import org.jetbrains.kotlinx.dataframe.io.writeJson
 import org.jetbrains.kotlinx.dataframe.values
 import java.io.ByteArrayOutputStream
 
-fun DataFrame<*>.normalizePotuzLoadedResults(): DataFrame<ResultEntry> =
-    this
-        .unfoldPotuzConfig()
-        .convertRawConfigToSimConfig()
-
-fun DataFrame<*>.unfoldPotuzConfig(): DataFrame<RawConfigResultEntry> =
-    this
-        .cast<RawConfigResultEntry>()
-        .unfold { "config"() }
-
-fun DataFrame<RawConfigResultEntry>.convertRawConfigToSimConfig(): DataFrame<ResultEntry> =
-    this.convert { config }
-        .with { SimConfig.fromPotuzSimulationConfigRow(it) }
-        .unfold { "config"() }
-        .cast(/*verify = true*/)
+//fun DataFrame<*>.normalizePotuzLoadedResults(): DataFrame<ResultEntry> =
+//    this
+//        .unfoldPotuzConfig()
+//        .convertRawConfigToSimConfig()
+//
+//fun DataFrame<*>.unfoldPotuzConfig(): DataFrame<RawConfigResultEntry> =
+//    this
+//        .cast<RawConfigResultEntry>()
+//        .unfold { "config"() }
+//
+//fun DataFrame<RawConfigResultEntry>.convertRawConfigToSimConfig(): DataFrame<ResultEntry> =
+//    this.convert { config }
+//        .with { SimConfig.fromPotuzSimulationConfigRow(it) }
+//        .unfold { "config"() }
+//        .cast(/*verify = true*/)
 
 inline fun <T, reified C> DataFrame<T>.expandDataColumnToColumnGroup(column: ColumnReference<C>): DataFrame<T> {
     return this.replace(column).with { col ->

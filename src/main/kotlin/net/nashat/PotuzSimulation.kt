@@ -1,9 +1,7 @@
 package net.nashat
 
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.jetbrains.kotlinx.dataframe.DataFrame
-import org.jetbrains.kotlinx.dataframe.api.print
 import org.jetbrains.kotlinx.dataframe.api.toDataFrame
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.random.Random
@@ -35,89 +33,41 @@ fun runAll() {
                 40,
                 100
             ).flatMap { chunkCount ->
-                listOf(
-                    RSParams(1, false),
-                    RSParams(1, true),
-                    RSParams(2, false),
-                    RSParams(2, true),
-                    RSParams(3, true),
-                    RLNCParams(),
-                ).map { erasureParams ->
-                    PotuzParams.create(chunkCount, erasureParams)
+                Erasure.values().map { erasure ->
+                    SimConfig(
+                        nodeCount = 1000,
+                        peerCount = peerCount,
+                        numberOfChunks = chunkCount,
+                        erasure = erasure
+                    )
                 }
-            }.map { potuzParams ->
-                PotuzSimulationConfig(
-                    potuzParams,
-                    nodeCount = 1000,
-                    peerCount = peerCount,
-                    isGodStopMode = true
-                )
             }
         }
+            .map { PotuzSimulationConfig(it) }
 
     val jsonPretty = Json {
         prettyPrint = true
         encodeDefaults = true
     }
 
-    val readyCounter = AtomicInteger()
-    val results = configs
-        .parallelStream()
-        .map { config ->
-            val res = PotuzSimulation(config).run()
-            println("Complete " + readyCounter.incrementAndGet() + "/" + configs.size)
-            config to res
-        }
-        .toList()
-        .toMap()
+    val result = PotuzSimulation.runAll(configs)
 
-
-    results.forEach { (config, result) ->
-        println(jsonPretty.encodeToString(config))
-        result.print(rowsLimit = Int.MAX_VALUE)
-        println()
-    }
-
-    PotuzIO().writeResultsToJson("./result.json", results.keys, results.values)
+    PotuzIO().writeResultsToJson("./result.json", result)
 
     println("Completed in ${System.currentTimeMillis() - startT} ms")
 }
 
-fun noErasureCodingDispersionTest() {
-    val cfg = PotuzSimulationConfig(
-        params = PotuzParams(
-            numberOfChunks = 10,
-            rsParams = RSParams(
-                extensionFactor = 1,
-                isDistinctMeshesPerChunk = true,
-                chunkSelectionStrategy = ChunkSelectionStrategy.PreferRarest
-            )
-        ),
-        peerCount = 10,
-        isGodStopMode = true
-    )
-
-    val res = PotuzSimulation(cfg, logEveryRound = true).run()
-    res.print(rowsLimit = 10000, valueLimit = 10000)
-}
-
 fun mainTest() {
-    val cfg = PotuzSimulationConfig(
-        params = PotuzParams(
-            numberOfChunks = 40,
-            latencyRounds = 10,
-            rsParams = RSParams(
-                extensionFactor = 1,
-                isDistinctMeshesPerChunk = true,
-                chunkSelectionStrategy = ChunkSelectionStrategy.PreferLater
-            )
-        ),
+    val cfg = SimConfig(
         peerCount = 200,
-        isGodStopMode = true,
+        numberOfChunks = 40,
+        latencyRounds = 10,
+        erasure = Erasure.NoErasure,
+        rsIsDistinctMeshes = true,
+        rsChunkSelectionStrategy = ChunkSelectionStrategy.PreferLater
     )
 
-
-    PotuzSimulation(cfg, withChunkDistribution = false, logEveryRound = true).run()
+    PotuzSimulation(PotuzSimulationConfig(cfg), withChunkDistribution = false, logEveryRound = true).run()
 }
 
 class PotuzSimulation(
@@ -129,45 +79,47 @@ class PotuzSimulation(
     val nodes: List<AbstractNode>
     val network: RandomNetwork
     val nodeSelectorStrategy: ReceiveNodeSelectorStrategy
-    val rnd = Random(config.randomSeed)
+    val rnd = Random(config.simConfig.randomSeed)
+
+    private val simConfig get() = config.simConfig
 
     init {
-        setFieldPrime(config.params.pPrime)
-        when {
-            config.params.rlncParams != null -> {
+        setFieldPrime(config.pPrime)
+        when (config.simConfig.erasure) {
+            Erasure.RLNC -> {
 
-                nodes = List(config.nodeCount) { index -> RlncNode(index, rnd, config.params) }
-                network = RandomNetworkGenerator(config.nodeCount, config.peerCount, rnd).generate()
+                nodes = List(simConfig.nodeCount) { index -> RlncNode(index, rnd, config) }
+                network = RandomNetworkGenerator(simConfig.nodeCount, simConfig.peerCount, rnd).generate()
                 nodeSelectorStrategy = ReceiveNodeSelectorStrategy.createNetworkLimitedReceiveMessage(
                     nodes,
                     network,
-                    config.params.messageBufferSize
+                    config.messageBufferSize
                 )
             }
 
-            config.params.rsParams != null -> {
-                val extendedChunksCount = config.params.numberOfChunks * config.params.rsParams.extensionFactor
+            else -> {
+                val extendedChunksCount = simConfig.numberOfChunks * simConfig.erasure.extensionFactor
                 val phase0ChunkMeshes: List<RandomNetwork>
                 val phase1ChunkMeshes: List<RandomNetwork>
-                if (config.params.rsParams.isDistinctMeshesPerChunk) {
+                if (simConfig.rsIsDistinctMeshes) {
                     phase0ChunkMeshes = List(extendedChunksCount) {
                         RandomNetworkGenerator(
-                            config.nodeCount,
-                            config.peerCount,
+                            simConfig.nodeCount,
+                            simConfig.peerCount,
                             rnd
                         ).generate()
                     }
                     phase1ChunkMeshes =
-                        if (config.params.rsParams.meshStrategy == MeshStrategy.TwoPhaseMesh)
+                        if (simConfig.rsMeshStrategy == MeshStrategy.TwoPhaseMesh)
                             phase0ChunkMeshes.map { RandomNetworkGenerator.withReducedPeerCount(it, 3, rnd) }
                         else
                             emptyList()
 
                 } else {
                     val singleMesh =
-                        RandomNetworkGenerator(config.nodeCount, config.peerCount, rnd).generate()
+                        RandomNetworkGenerator(simConfig.nodeCount, simConfig.peerCount, rnd).generate()
                     phase0ChunkMeshes = List(extendedChunksCount) { singleMesh }
-                    if (config.params.rsParams.meshStrategy == MeshStrategy.TwoPhaseMesh) {
+                    if (simConfig.rsMeshStrategy == MeshStrategy.TwoPhaseMesh) {
                         val phase1SingleMesh =
                             RandomNetworkGenerator.withReducedPeerCount(singleMesh, 3, rnd)
                         phase1ChunkMeshes = List(extendedChunksCount) { phase1SingleMesh }
@@ -176,23 +128,21 @@ class PotuzSimulation(
                     }
                 }
 
-                nodes = List(config.nodeCount) { index ->
+                nodes = List(simConfig.nodeCount) { index ->
                     RsNode(
                         index,
                         rnd,
-                        config.params,
+                        config,
                         phase0ChunkMeshes,
                         phase1ChunkMeshes
                     )
                 }
-                network = RandomNetworkGenerator.createAllToAll(config.nodeCount)
+                network = RandomNetworkGenerator.createAllToAll(simConfig.nodeCount)
                 nodeSelectorStrategy = ReceiveNodeSelectorStrategy.createRandomLimitedReceiveMessage(
                     nodes,
-                    config.params.messageBufferSize
+                    config.messageBufferSize
                 )
             }
-
-            else -> throw NotImplementedError()
         }
 
         nodes.first().makePublisher()
@@ -252,8 +202,8 @@ class PotuzSimulation(
     val receivedNodeCount get() = nodes.count { it.isRecovered() }
     val activeNodeCount get() = nodes.count { it.isActive() }
     val totalChunksCount get() = nodes.sumOf { it.getChunksCount() }
-    val targetTotalChunksCount = config.nodeCount * config.params.numberOfChunks
-    val allReceived get() = receivedNodeCount == config.nodeCount
+    val targetTotalChunksCount = simConfig.nodeCount * simConfig.numberOfChunks
+    val allReceived get() = receivedNodeCount == simConfig.nodeCount
 
     fun chunkDistribution() =
         nodes
@@ -310,7 +260,7 @@ class PotuzSimulation(
             )
 
             if (logEveryRound) {
-                val totalNonDupRequired = (nodes.size - 1) * config.params.numberOfChunks
+                val totalNonDupRequired = (nodes.size - 1) * simConfig.numberOfChunks
                 val nonDupDone = totalMessageCount - duplicateMessageCount
                 println("$currentRound: $nonDupDone/$totalNonDupRequired, ${rows.last()}")
             }
@@ -324,14 +274,14 @@ class PotuzSimulation(
     companion object {
         fun runAll(
             configs: List<PotuzSimulationConfig>, withChunkDistribution: Boolean = false
-        ): DataFrame<RawConfigResultEntry> {
+        ): DataFrame<ResultEntry> {
             val readyCounter = AtomicInteger()
             val results = configs
                 .parallelStream()
                 .map { config ->
                     val res = PotuzSimulation(config, withChunkDistribution = withChunkDistribution).run()
                     println("Complete " + readyCounter.incrementAndGet() + "/" + configs.size)
-                    RawConfigResultEntry(config, res)
+                    ResultEntry(config.simConfig, res)
                 }
                 .toList()
             return results.toDataFrame()

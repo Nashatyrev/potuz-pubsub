@@ -1,5 +1,8 @@
-package net.nashat
+package net.nashat.experiments
 
+import net.nashat.CoefMatrix
+import net.nashat.plus
+import net.nashat.times
 import org.jlinalg.Matrix
 import org.jlinalg.Vector
 import org.jlinalg.field_p.FieldPFactoryMap
@@ -7,7 +10,7 @@ import org.junit.jupiter.api.Test
 import kotlin.random.Random
 
 
-class SomeTests {
+class SomeExp {
 
     val random = Random(1)
     val maxRandomCoef = 1024L

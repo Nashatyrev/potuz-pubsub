@@ -4,6 +4,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.jetbrains.kotlinx.dataframe.DataFrame
 import org.jetbrains.kotlinx.dataframe.annotations.DataSchema
+import org.jetbrains.kotlinx.dataframe.api.cast
 import org.jetbrains.kotlinx.dataframe.api.columnOf
 import org.jetbrains.kotlinx.dataframe.api.convert
 import org.jetbrains.kotlinx.dataframe.api.dataFrameOf
@@ -22,41 +23,30 @@ class PotuzIO {
     }
 
     fun writeResultsToJson(
-        file: String,
-        configs: Collection<PotuzSimulationConfig>,
-        results: Collection<DataFrame<CoreResult>>
+        file: String, res: DataFrame<ResultEntry>
     ) {
         File(file).writer().use { writer ->
-            writeResultsToJson(writer, configs, results)
+            writeResultsToJson(writer, res)
         }
     }
 
     fun writeResultsToJson(
-        out: Appendable,
-        configs: Collection<PotuzSimulationConfig>,
-        results: Collection<DataFrame<CoreResult>>
+        out: Appendable, res: DataFrame<ResultEntry>
     ) {
-        require(configs.size == results.size)
-
-        val configColumn = columnOf(*configs.toTypedArray()).named("config")
-        val resultColumn = columnOf(*results.toTypedArray()).named("result")
-
-        val allDf =
-            RawConfigResultEntry.createRawResultDataFrame(configs, results)
-                .convert(configColumn).with { jsonFile.encodeToString(it) }
-
-        allDf.writeJson(out, prettyPrint = true)
+        res.writeJson(out)
     }
 
-    fun readResultsFromJson(file: String): DataFrame<Any?> =
+    fun readResultsFromJson(file: String): DataFrame<ResultEntry> =
         File(file).inputStream().use { input ->
             readResultsFromJson(input)
         }
 
 
-    fun readResultsFromJson(input: InputStream): DataFrame<Any?> {
+    fun readResultsFromJson(input: InputStream): DataFrame<ResultEntry> {
         return DataFrame.readJson(input)
-            .convert("config").with { jsonFile.decodeFromString<PotuzSimulationConfig>(it.toString()) }
+            .cast<ResultEntry>()
+            // workaround: not sure how to correctly serialize/deserialize enum values
+            .convert { "config"["erasure"]<String>() }.with { Erasure.valueOf(it.toString()) }
     }
 
     companion object {
