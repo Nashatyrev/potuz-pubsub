@@ -23,8 +23,14 @@ class RandomNetwork(
     val minPeerConnections = connections.values.map { it.size }.min()
     val maxPeerConnections = connections.values.map { it.size }.max()
 
+    val peerCountDistribution by lazy {
+        connections.values.map { it.size }.groupingBy { it }.eachCount()
+    }
+
     init {
-        require(nodes == (0 until nodes.size).toList())
+        require(nodes == (0 until nodes.size).toList()) {
+            "Some nodes missing: size = ${nodes.size}"
+        }
     }
 }
 
@@ -76,6 +82,24 @@ class RandomNetworkGenerator(
                 noChangeCounter = 0
             }
         }
+
+        availableNodes
+            .forEach { node ->
+                while (connections[node]!!.size < peerCount - 1) {
+                    val candidate = connections.keys.random(rnd)
+                    if (node == candidate)
+                        continue
+                    val candidateConnections = connections[candidate]!!
+                    if (candidateConnections.size > peerCount)
+                        continue
+                    if (node in candidateConnections)
+                        continue
+
+                    connections[node]!! += candidate
+                    candidateConnections += node
+                }
+            }
+
         return connections;
     }
 

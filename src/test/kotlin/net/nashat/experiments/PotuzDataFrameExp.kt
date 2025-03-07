@@ -51,8 +51,7 @@ class PotuzDataFrameExp {
 
     @Test
     fun loadFullResultTest() {
-        val resDf = PotuzIO()
-            .readResultsFromJson("results/result.json")
+        val resDf = PotuzIO().readResultsFromJson("results/result.json")
 //            .unfoldPotuzConfig()
 //            .convertRawConfigToSimConfig()
 
@@ -66,12 +65,9 @@ class PotuzDataFrameExp {
 
         println(df2.describe())
 
-        val df3 = df2
-            .convert { result }.with { res ->
+        val df3 = df2.convert { result }.with { res ->
                 res.last()
-            }
-            .filter { config.numberOfChunks == 1 }
-            .select { config.numberOfChunks and result }
+            }.filter { config.numberOfChunks == 1 }.select { config.numberOfChunks and result }
 
         println(df3.describe())
 
@@ -100,17 +96,12 @@ class PotuzDataFrameExp {
 
     @Test
     fun testExperimentsMergeByTime() {
-        val df1 = loadTestResult()
-            .deriveExtraResults()
-            .removeNonChangingConfigColumns()
+        val df1 = loadTestResult().deriveExtraResults().removeNonChangingConfigColumns()
 
         df1.flatten { config }.dump()
 
-        val df3 = df1
-            .filter {
-                config.numberOfChunks == 20 &&
-                        config.peerCount == 10 &&
-                        config.rsIsDistinctMeshes == true
+        val df3 = df1.filter {
+                config.numberOfChunks == 20 && config.peerCount == 10 && config.rsIsDistinctMeshes == true
             }.removeNonChangingConfigColumns()
 
 
@@ -128,9 +119,7 @@ class PotuzDataFrameExp {
 //            .dump()
 //
 //        val cfgColSelector = changingConfigColumns.map { it.toColumnAccessor() }.toColumnSet()
-        val df4 = df3
-            .explode { result }
-            .cast<ResultEntryExploded>()
+        val df4 = df3.explode { result }.cast<ResultEntryExploded>()
             .select { config and result.derived.relativeRound and result.derived.doneMsgFraction }
 
         df4.dump()
@@ -141,29 +130,22 @@ class PotuzDataFrameExp {
 
     @Test
     fun testProcessRunResults() {
-        val cfg = PotuzSimulationConfig(
-            SimConfig(
-                nodeCount = 1000,
-                peerCount = 10,
-                numberOfChunks = 10,
-                erasure = Erasure.RsX2,
-            )
+        val cfg = SimConfig(
+            nodeCount = 1000,
+            peerCount = 10,
+            numberOfChunks = 10,
+            erasure = Erasure.RsX2,
         )
 
         val res = PotuzSimulation.runAll(
-            listOf(cfg),
-            withChunkDistribution = true
+            listOf(cfg), withChunkDistribution = true
         )
 
-        val resDf = res
-            .deriveExtraResults()
-            .explode { result }
-            .cast<ResultEntryExploded>()
+        val resDf = res.deriveExtraResults().explode { result }.cast<ResultEntryExploded>()
             .select { result.derived.relativeRound and result.core.chunkDistribution }
             .convert { "chunkDistribution"<List<Int>>() }.with {
                 it.withIndex().toDataFrame()
-            }
-            .explode { "chunkDistribution"() }
+            }.explode { "chunkDistribution"() }
 
         resDf.dump()
     }

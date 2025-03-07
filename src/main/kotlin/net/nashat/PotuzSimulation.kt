@@ -15,7 +15,7 @@ fun main() {
 fun runAll() {
     val startT = System.currentTimeMillis()
 
-    val configs: List<PotuzSimulationConfig> =
+    val configs =
         listOf(
             2,
             6,
@@ -43,7 +43,6 @@ fun runAll() {
                 }
             }
         }
-            .map { PotuzSimulationConfig(it) }
 
     val jsonPretty = Json {
         prettyPrint = true
@@ -58,16 +57,18 @@ fun runAll() {
 }
 
 fun mainTest() {
-    val cfg = SimConfig(
-        peerCount = 200,
-        numberOfChunks = 40,
-        latencyRounds = 10,
-        erasure = Erasure.NoErasure,
-        rsIsDistinctMeshes = true,
-        rsChunkSelectionStrategy = ChunkSelectionStrategy.PreferLater
+    PotuzSimulation.runAll(
+        listOf(/*3,*/ 4 /*, 5, 6, 7, 8, 9, 10*/)
+            .map { peerCount ->
+                SimConfig(
+                    peerCount = peerCount,
+                    erasure = Erasure.NoErasure,
+                    numberOfChunks = 40,
+                    rsChunkSelectionStrategy = ChunkSelectionStrategy.PreferRarest,
+                    latencyRounds = 10,
+                )
+            }
     )
-
-    PotuzSimulation(PotuzSimulationConfig(cfg), withChunkDistribution = false, logEveryRound = true).run()
 }
 
 class PotuzSimulation(
@@ -274,13 +275,23 @@ class PotuzSimulation(
 
     companion object {
         fun runAll(
+            configs: List<SimConfig>, withChunkDistribution: Boolean = false
+        ): DataFrame<ResultEntry> =
+            runAllExt(configs.map { PotuzSimulationConfig(it) }, withChunkDistribution)
+
+        fun runAllExt(
             configs: List<PotuzSimulationConfig>, withChunkDistribution: Boolean = false
         ): DataFrame<ResultEntry> {
             val readyCounter = AtomicInteger()
             val results = configs
                 .parallelStream()
                 .map { config ->
-                    val res = PotuzSimulation(config, withChunkDistribution = withChunkDistribution).run()
+                    val res = try {
+                        PotuzSimulation(config, withChunkDistribution = withChunkDistribution).run()
+                    } catch (e: Exception) {
+                        System.err.println("Error for config: $config")
+                        throw e
+                    }
                     println("Complete " + readyCounter.incrementAndGet() + "/" + configs.size)
                     ResultEntry(config.simConfig, res)
                 }

@@ -21,4 +21,16 @@ class RandomNetworkTest {
         assert(network2.minPeerConnections == 3)
         assert(peerCountDistrib[3]!! > 500)
     }
+
+    @Test
+    fun `check random network nodes has enough peers`() {
+        val rnd= Random(1)
+        for (peerCount in listOf(3, 4, 6, 10, 20)) {
+            repeat(30) {
+                val network = RandomNetworkGenerator(1000, peerCount, rnd).generate()
+                assert(network.minPeerConnections >= peerCount - 1)
+                assert(network.maxPeerConnections <= peerCount + 1)
+            }
+        }
+    }
 }

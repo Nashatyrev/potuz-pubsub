@@ -25,32 +25,27 @@ class PotuzDataFrameTest {
 
     @Test
     fun `check run save load roundtrip`() {
-        val cfg0 = PotuzSimulationConfig(
-            SimConfig(
-                nodeCount = 1000,
-                peerCount = 10,
-                numberOfChunks = 10,
-                erasure = Erasure.RsX2,
-            )
+        val cfg0 = SimConfig(
+            nodeCount = 1000,
+            peerCount = 10,
+            numberOfChunks = 10,
+            erasure = Erasure.RsX2,
         )
-        val cfg1 = PotuzSimulationConfig(
-            SimConfig(
-                nodeCount = 1000,
-                peerCount = 10,
-                numberOfChunks = 10,
-                erasure = Erasure.RLNC,
-            )
+
+        val cfg1 = SimConfig(
+            nodeCount = 1000,
+            peerCount = 10,
+            numberOfChunks = 10,
+            erasure = Erasure.RLNC,
         )
+
 
         fun checkDataFrame(df: DataFrame<ResultEntry>) {
             assert(df.rowsCount() == 2)
             val erasures = df.get { config.erasure }.values().toList()
             assert(erasures == listOf(Erasure.RsX2, Erasure.RLNC))
 
-            val df1 = df
-                .deriveExtraResults()
-                .explode { result }
-                .cast<ResultEntryExploded>()
+            val df1 = df.deriveExtraResults().explode { result }.cast<ResultEntryExploded>()
 
             assert(df1.rowsCount() > 10)
 
@@ -68,8 +63,7 @@ class PotuzDataFrameTest {
         }
 
         val res: DataFrame<ResultEntry> = PotuzSimulation.runAll(
-            listOf(cfg0, cfg1),
-            withChunkDistribution = true
+            listOf(cfg0, cfg1), withChunkDistribution = true
         )
 
         checkDataFrame(res)
