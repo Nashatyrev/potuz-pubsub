@@ -253,7 +253,8 @@ class PotuzSimulation(
                 totalMessageCount,
                 duplicateMessageCount,
                 duplicateMessageBeforeRecoverCount,
-                getDuplicateOneConnectionMessageCount(),
+//                getDuplicateOneConnectionMessageCount(), // optimization needed
+                0,
                 chunkDistr,
                 chunkCountDistribution(),
                 congestedNodeCount

@@ -50,10 +50,12 @@ class RsNode(
         if (isRecovered()) return generateNewMessageWithoutPartialExtensionForPublisher(peers)
         maybeSwitchToPhase1Meshes()
 
-        fun getMeshNodes(vectorIndex: Int): List<AbstractNode> {
+        val peerByIndex = peers.associateBy { it.index }
+        val meshNodesCache = mutableMapOf<Int, List<AbstractNode>>()
+        fun getMeshNodes(vectorIndex: Int): List<AbstractNode> = meshNodesCache.computeIfAbsent(vectorIndex) {
             val chunkIndex = coefDescriptors[vectorIndex].originalVectorId!!
             val chunkMesh = chunkMeshes[chunkIndex]
-            return peers.filter { it.index in chunkMesh }
+            chunkMesh.mapNotNull { peerByIndex[it] }
         }
 
         // prefer later (and thus more rare) vectors
