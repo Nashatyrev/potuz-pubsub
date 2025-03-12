@@ -2,6 +2,8 @@ package net.nashat
 
 import kotlinx.serialization.json.Json
 import org.jetbrains.kotlinx.dataframe.DataFrame
+import org.jetbrains.kotlinx.dataframe.api.add
+import org.jetbrains.kotlinx.dataframe.api.explode
 import org.jetbrains.kotlinx.dataframe.api.toDataFrame
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.random.Random
@@ -57,18 +59,46 @@ fun runAll() {
 }
 
 fun mainTest() {
+    val commonCfg = SimConfig(
+        erasure = Erasure.NoErasure,
+        numberOfChunks = 40,
+        latencyRounds = 20,
+        randomSeed = 1
+    )
+
     val resDf =
         PotuzSimulation.runAll(
-            listOf(3, 5, 10, 20, 40)
-                .map { peerCount ->
-                    SimConfig(
-                        peerCount = peerCount,
-                        erasure = Erasure.NoErasure,
-                        numberOfChunks = 20,
-                        latencyRounds = 10,
-                    )
-                }
+            listOf(
+                commonCfg.copy(
+                    peerCount = 10,
+                    rsMeshStrategy = MeshStrategy.Static
+                ),
+                commonCfg.copy(
+                    peerCount = 3,
+                    rsMeshStrategy = MeshStrategy.Static
+                ),
+                commonCfg.copy(
+                    peerCount = 4,
+                    rsMeshStrategy = MeshStrategy.Static
+                ),
+                commonCfg.copy(
+                    peerCount = 5,
+                    rsMeshStrategy = MeshStrategy.Static
+                ),
+                commonCfg.copy(
+                    peerCount = 10,
+                    rsMeshStrategy = MeshStrategy.TwoPhaseMesh
+                ),
+            )
         )
+            .deriveExtraResults()
+            .explode { result }
+
+    val df1 = resDf.add("peer_count_and_mesh_type") { "" + config.peerCount + "/" + config.rsMeshStrategy }
+    df1
+        .myPlotGroupDeliveredPartsAndMessageTypeCounts(adjustX2 = 0) {
+            "peer_count_and_mesh_type"()
+        }
 }
 
 class PotuzSimulation(
@@ -284,7 +314,7 @@ class PotuzSimulation(
         ): DataFrame<ResultEntry> {
             val readyCounter = AtomicInteger()
             val results = configs
-//                .parallelStream()
+                .parallelStream()
                 .map { config ->
                     val res = try {
                         PotuzSimulation(config, withChunkDistribution = withChunkDistribution).run()

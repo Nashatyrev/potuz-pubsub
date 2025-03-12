@@ -69,7 +69,7 @@ fun <T> DataFrame<T>.myPlotLinesWithEndingVLine(
 
 
 fun <T> DataFrame<T>.myPlotMessageCount(
-    groupCol: ColumnSelector<T, *>,
+    groupCol: ColumnSelector<*, *>,
 ): Plot {
 
     val msgCount by column<Int>()
@@ -81,7 +81,7 @@ fun <T> DataFrame<T>.myPlotMessageCount(
         .into(msgCountType, msgCount)
 
     return gatheredDf
-        .groupBy { getColumn(groupCol) and msgCountType  }
+        .groupBy { this.getColumn(groupCol) and msgCountType }
         .plot {
             area {
                 x(result.derived.relativeRound)
@@ -98,7 +98,7 @@ fun <T> DataFrame<T>.myPlotMessageCount(
 fun <T> DataFrame<T>.myPlotGroupDeliveredPartsAndMessageTypeCounts(
     adjustX1: Int = 0,
     adjustX2: Int = 0,
-    groupCol: ColumnSelector<T, *>,
+    groupCol: ColumnSelector<*, *>,
 ) = plotBunch {
     add(
         convert(groupCol).toStr()
