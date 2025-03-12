@@ -1,6 +1,7 @@
 package net.nashat.experiments
 
 import net.nashat.Erasure
+import net.nashat.MeshStrategy
 import net.nashat.PotuzIO
 import net.nashat.PotuzSimulation
 import net.nashat.PotuzSimulationConfig
@@ -14,13 +15,16 @@ import net.nashat.derived
 import net.nashat.doneMsgFraction
 import net.nashat.dump
 import net.nashat.erasure
+import net.nashat.myPlotGroupDeliveredPartsAndMessageTypeCounts
 import net.nashat.numberOfChunks
 import net.nashat.peerCount
 import net.nashat.relativeRound
 import net.nashat.removeNonChangingConfigColumns
 import net.nashat.result
 import net.nashat.rsIsDistinctMeshes
+import net.nashat.rsMeshStrategy
 import net.nashat.selectLastForEachGroup
+import org.jetbrains.kotlinx.dataframe.api.add
 import org.jetbrains.kotlinx.dataframe.api.cast
 import org.jetbrains.kotlinx.dataframe.api.convert
 import org.jetbrains.kotlinx.dataframe.api.describe
@@ -36,7 +40,7 @@ import org.jetbrains.kotlinx.dataframe.api.with
 import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 
-@Disabled
+//@Disabled
 class PotuzDataFrameExp {
     private fun loadTestResult() = PotuzIO().readResultsFromJson(
         this.javaClass.getResource("/result1.json")?.file ?: throw IllegalStateException("Result1 file not found")
@@ -150,4 +154,47 @@ class PotuzDataFrameExp {
         resDf.dump()
     }
 
+    @Test
+    fun `check weird IndexOutBound error inside dataframe`() {
+        val commonCfg = SimConfig(
+            erasure = Erasure.NoErasure,
+            numberOfChunks = 40,
+            latencyRounds = 20,
+            randomSeed = 1
+        )
+
+        val resDf =
+            PotuzSimulation.runAll(
+                listOf(
+                    commonCfg.copy(
+                        peerCount = 10,
+                        rsMeshStrategy = MeshStrategy.Static
+                    ),
+                    commonCfg.copy(
+                        peerCount = 3,
+                        rsMeshStrategy = MeshStrategy.Static
+                    ),
+                    commonCfg.copy(
+                        peerCount = 4,
+                        rsMeshStrategy = MeshStrategy.Static
+                    ),
+                    commonCfg.copy(
+                        peerCount = 5,
+                        rsMeshStrategy = MeshStrategy.Static
+                    ),
+                    commonCfg.copy(
+                        peerCount = 9,
+                        rsMeshStrategy = MeshStrategy.TwoPhaseMesh
+                    ),
+                )
+            )
+                .deriveExtraResults()
+                .explode { result }
+
+        val df1 = resDf.add("peer_count_and_mesh_type") { "" + config.peerCount + "/" + config.rsMeshStrategy }
+        df1
+            .myPlotGroupDeliveredPartsAndMessageTypeCounts(adjustX2 = 0) {
+                "peer_count_and_mesh_type"()
+            }
+    }
 }

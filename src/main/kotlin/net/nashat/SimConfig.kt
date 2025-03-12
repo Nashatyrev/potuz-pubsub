@@ -66,8 +66,8 @@ enum class Erasure(val extensionFactor: Int) {
 @DataSchema
 data class SimConfig(
     val nodeCount: Int = 1000,
-    val peerCount: Int,
-    val numberOfChunks: Int,
+    val peerCount: Int = -1,
+    val numberOfChunks: Int = -1,
     val latencyRounds: Int = 0,
     val erasure: Erasure,
     val rsIsDistinctMeshes: Boolean = true,

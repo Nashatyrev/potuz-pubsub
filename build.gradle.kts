@@ -16,6 +16,7 @@ repositories {
 dependencies {
     implementation("org.apache.commons:commons-math3:3.6.1")
     implementation("org.jlinalg:jlinalg:0.9.1")
+    implementation("org.jgrapht:jgrapht-core:1.5.1")
     implementation("org.jetbrains.kotlinx:dataframe:0.13.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
     implementation("org.jetbrains.kotlinx:kandy-lets-plot:0.8.0-dev-59")

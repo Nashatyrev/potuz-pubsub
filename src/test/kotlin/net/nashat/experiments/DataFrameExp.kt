@@ -9,7 +9,6 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import net.nashat.CoreResult
 import net.nashat.Erasure
-import net.nashat.PotuzIO
 import net.nashat.PotuzSimulationConfig
 import net.nashat.SimConfig
 import net.nashat.dump
@@ -44,7 +43,7 @@ import org.junit.jupiter.api.Test
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 
-class DataFrameTest {
+class DataFrameExp {
 
     @Test
     fun diffTest() {
@@ -178,7 +177,8 @@ class DataFrameTest {
         val structCol = df2.getColumn { "struct"<Struct>() }
         val values = structCol.values.toList()
 
-        println(values.first().i)
+        // ClassCastException below
+//        println(values.first().i)
     }
 }
 

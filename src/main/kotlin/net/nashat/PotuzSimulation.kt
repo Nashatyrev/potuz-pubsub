@@ -57,18 +57,18 @@ fun runAll() {
 }
 
 fun mainTest() {
-    PotuzSimulation.runAll(
-        listOf(/*3,*/ 4 /*, 5, 6, 7, 8, 9, 10*/)
-            .map { peerCount ->
-                SimConfig(
-                    peerCount = peerCount,
-                    erasure = Erasure.NoErasure,
-                    numberOfChunks = 40,
-                    rsChunkSelectionStrategy = ChunkSelectionStrategy.PreferRarest,
-                    latencyRounds = 10,
-                )
-            }
-    )
+    val resDf =
+        PotuzSimulation.runAll(
+            listOf(3, 5, 10, 20, 40)
+                .map { peerCount ->
+                    SimConfig(
+                        peerCount = peerCount,
+                        erasure = Erasure.NoErasure,
+                        numberOfChunks = 20,
+                        latencyRounds = 10,
+                    )
+                }
+        )
 }
 
 class PotuzSimulation(
@@ -284,7 +284,7 @@ class PotuzSimulation(
         ): DataFrame<ResultEntry> {
             val readyCounter = AtomicInteger()
             val results = configs
-                .parallelStream()
+//                .parallelStream()
                 .map { config ->
                     val res = try {
                         PotuzSimulation(config, withChunkDistribution = withChunkDistribution).run()

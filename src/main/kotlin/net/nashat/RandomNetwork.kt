@@ -4,6 +4,12 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.random.Random
 
+import org.jgrapht.graph.*
+import org.jgrapht.*
+import org.jgrapht.generate.*
+import org.jgrapht.graph.builder.*
+import java.util.concurrent.atomic.AtomicInteger
+
 class RandomNetwork(
     val connections: Map<Int, Set<Int>>
 ) {
@@ -43,7 +49,12 @@ class RandomNetworkGenerator(
 
     var missCounter = 0
 
-    fun generate() = RandomNetwork(generateConnections())
+    fun generate() = RandomNetwork(
+//        generateConnections()
+//        generateUndirectedGraph(totalNodeCount, peerCount)
+        if (peerCount == totalNodeCount - 1) generateAllToAll()
+        else generateUndirectedGraphJGraphT(totalNodeCount, peerCount)
+    )
 
     private fun generateAllToAll(): Map<Int, Set<Int>> {
         return (0 until totalNodeCount).map { n1 -> n1 to (0 until totalNodeCount).filter { n2 -> n1 != n2 }.toSet() }
@@ -55,10 +66,11 @@ class RandomNetworkGenerator(
 
         val connections = (0 until totalNodeCount).map { it to mutableSetOf<Int>() }.toMap()
         val availableNodes = connections.keys.toMutableSet()
+        var availableNodesAsList = availableNodes.toList()
         var noChangeCounter = 0;
         while (availableNodes.size >= 2) {
-            val node1 = availableNodes.random(rnd)
-            val node2 = availableNodes.random(rnd)
+            val node1 = availableNodesAsList.random(rnd)
+            val node2 = availableNodesAsList.random(rnd)
             if (node1 == node2) continue
 
             val connections1 = connections[node1]!!
@@ -81,12 +93,14 @@ class RandomNetworkGenerator(
             } else {
                 noChangeCounter = 0
             }
+            availableNodesAsList = availableNodes.toList()
         }
 
+        val allNodes = connections.keys.toList()
         availableNodes
             .forEach { node ->
                 while (connections[node]!!.size < peerCount - 1) {
-                    val candidate = connections.keys.random(rnd)
+                    val candidate = allNodes.random(rnd)
                     if (node == candidate)
                         continue
                     val candidateConnections = connections[candidate]!!
@@ -106,6 +120,97 @@ class RandomNetworkGenerator(
     companion object {
         fun createAllToAll(nodeCount: Int): RandomNetwork =
             RandomNetworkGenerator(nodeCount, nodeCount - 1, Random(0)).generate()
+
+        /**
+         * Generates an undirected graph using the stub matching (configuration model) approach.
+         *
+         * Each node (represented by an Int from 0 until nodeCount) will have exactly [degree] neighbors.
+         *
+         * @param nodeCount The total number of nodes in the graph.
+         * @param degree The desired degree (number of connections) per node.
+         * @return A map where each key is a node and the value is a set of neighboring nodes.
+         */
+        fun generateUndirectedGraph(nodeCount: Int, degree: Int): Map<Int, Set<Int>> {
+            require(degree < nodeCount) { "Degree must be less than the number of nodes (no self-loops allowed)." }
+            require(nodeCount * degree % 2 == 0) { "The total degree (nodeCount * degree) must be even." }
+
+            // Create a list of stubs. Each node appears 'degree' times.
+            val stubs = mutableListOf<Int>()
+            for (node in 0 until nodeCount) {
+                repeat(degree) { stubs.add(node) }
+            }
+
+            val random = Random(System.currentTimeMillis())
+
+            while (true) {
+                stubs.shuffle(random)
+                val graph = (0 until nodeCount).associateWith { mutableSetOf<Int>() }.toMutableMap()
+                var valid = true
+
+                // Pair stubs consecutively to form edges.
+                for (i in stubs.indices step 2) {
+                    val u = stubs[i]
+                    val v = stubs[i + 1]
+
+                    // Check for self-loops or duplicate edges.
+                    if (u == v || graph[u]!!.contains(v)) {
+                        valid = false
+                        break
+                    }
+                    // Add the edge in both directions.
+                    graph[u]!!.add(v)
+                    graph[v]!!.add(u)
+                }
+
+                if (valid) {
+                    return graph.mapValues { it.value.toSet() }
+                }
+                // If the pairing wasn't valid, try again.
+            }
+        }
+
+        /**
+         * Generates an undirected regular graph using JGraphT and returns the connections as a map.
+         *
+         * @param nodeCount Total number of nodes in the graph.
+         * @param degree The degree for each node (number of connections).
+         * @return A map where each key is a node (Int) and the value is a set of neighboring nodes.
+         */
+        fun generateUndirectedGraphJGraphT(nodeCount: Int, degree: Int): Map<Int, Set<Int>> {
+            require(degree < nodeCount) { "Degree must be less than the number of nodes to avoid self-loops." }
+            require(nodeCount * degree % 2 == 0) { "The product of nodeCount and degree must be even." }
+
+            val vertexCounter = AtomicInteger(0)
+            val graph: Graph<Int, DefaultEdge> = GraphTypeBuilder
+                .undirected<Int, DefaultEdge>()
+                .vertexSupplier { vertexCounter.getAndIncrement() }
+                .edgeClass(DefaultEdge::class.java)
+                .buildGraph()
+
+            // Create an empty simple undirected graph.
+//            val graph: Graph<Int, DefaultEdge> = SimpleGraph(DefaultEdge::class.java)
+
+            // Add vertices to the graph.
+//            for (node in 0 until nodeCount) {
+//                graph.addVertex(node)
+//            }
+
+            // Create and use the random regular graph generator.
+            val generator = RandomRegularGraphGenerator<Int, DefaultEdge>(nodeCount, degree)
+            generator.generateGraph(graph)
+
+            // Convert the graph to a Map<Int, Set<Int>> representation.
+            return graph.vertexSet().associateWith { vertex ->
+                graph.edgesOf(vertex).map { edge ->
+                    // For an undirected edge, determine the opposite vertex.
+                    if (graph.getEdgeSource(edge) == vertex)
+                        graph.getEdgeTarget(edge)
+                    else
+                        graph.getEdgeSource(edge)
+                }.toSet()
+            }
+        }
+
 
         fun withReducedPeerCount(network: RandomNetwork, newMinPeerCount: Int, rnd: Random): RandomNetwork {
             require(network.minPeerConnections > newMinPeerCount)

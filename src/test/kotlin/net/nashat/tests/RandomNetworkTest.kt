@@ -33,4 +33,12 @@ class RandomNetworkTest {
             }
         }
     }
+
+    @Test
+    fun `check all-to-all is correctly generated`() {
+        val network = RandomNetworkGenerator(1000, 999, Random(1)).generate()
+        assert(network.minPeerConnections  == 999)
+        assert(network.maxPeerConnections == 999)
+
+    }
 }
