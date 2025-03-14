@@ -11,6 +11,7 @@ import net.nashat.chunkDistribution
 import net.nashat.config
 import net.nashat.core
 import net.nashat.deriveExtraResults
+import net.nashat.deriveExtraResultsExploded
 import net.nashat.derived
 import net.nashat.doneMsgFraction
 import net.nashat.dump
@@ -188,8 +189,7 @@ class PotuzDataFrameExp {
                     ),
                 )
             )
-                .deriveExtraResults()
-                .explode { result }
+                .deriveExtraResultsExploded()
 
         val df1 = resDf.add("peer_count_and_mesh_type") { "" + config.peerCount + "/" + config.rsMeshStrategy }
         df1

@@ -3,7 +3,6 @@ package net.nashat
 import kotlinx.serialization.json.Json
 import org.jetbrains.kotlinx.dataframe.DataFrame
 import org.jetbrains.kotlinx.dataframe.api.add
-import org.jetbrains.kotlinx.dataframe.api.explode
 import org.jetbrains.kotlinx.dataframe.api.toDataFrame
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.random.Random
@@ -91,8 +90,7 @@ fun mainTest() {
                 ),
             )
         )
-            .deriveExtraResults()
-            .explode { result }
+            .deriveExtraResultsExploded()
 
     val df1 = resDf.add("peer_count_and_mesh_type") { "" + config.peerCount + "/" + config.rsMeshStrategy }
     df1

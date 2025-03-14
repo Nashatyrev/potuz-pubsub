@@ -10,6 +10,7 @@ import org.jetbrains.kotlinx.dataframe.api.aggregate
 import org.jetbrains.kotlinx.dataframe.api.cast
 import org.jetbrains.kotlinx.dataframe.api.convert
 import org.jetbrains.kotlinx.dataframe.api.describe
+import org.jetbrains.kotlinx.dataframe.api.explode
 import org.jetbrains.kotlinx.dataframe.api.filter
 import org.jetbrains.kotlinx.dataframe.api.getColumn
 import org.jetbrains.kotlinx.dataframe.api.group
@@ -32,22 +33,6 @@ import org.jetbrains.kotlinx.dataframe.columns.ColumnReference
 import org.jetbrains.kotlinx.dataframe.io.writeJson
 import org.jetbrains.kotlinx.dataframe.values
 import java.io.ByteArrayOutputStream
-
-//fun DataFrame<*>.normalizePotuzLoadedResults(): DataFrame<ResultEntry> =
-//    this
-//        .unfoldPotuzConfig()
-//        .convertRawConfigToSimConfig()
-//
-//fun DataFrame<*>.unfoldPotuzConfig(): DataFrame<RawConfigResultEntry> =
-//    this
-//        .cast<RawConfigResultEntry>()
-//        .unfold { "config"() }
-//
-//fun DataFrame<RawConfigResultEntry>.convertRawConfigToSimConfig(): DataFrame<ResultEntry> =
-//    this.convert { config }
-//        .with { SimConfig.fromPotuzSimulationConfigRow(it) }
-//        .unfold { "config"() }
-//        .cast(/*verify = true*/)
 
 inline fun <T, reified C> DataFrame<T>.expandDataColumnToColumnGroup(column: ColumnReference<C>): DataFrame<T> {
     return this.replace(column).with { col ->
@@ -72,6 +57,9 @@ fun <T> DataFrame<T>.selectLastForEachGroup(groupBy: ColumnsSelector<T, *>): Dat
     this.groupBy(cols = groupBy).aggregate { last() }
         .select("aggregated")
         .ungroup { all() }
+
+fun DataFrame<ResultEntry>.deriveExtraResultsExploded(): DataFrame<ResultEntryExploded> =
+    deriveExtraResults().explode { result }.cast()
 
 fun DataFrame<ResultEntry>.deriveExtraResults(): DataFrame<ResultEntryEx> =
     this.convert { result }.with { coreResult ->

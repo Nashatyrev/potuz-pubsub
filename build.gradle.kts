@@ -11,6 +11,7 @@ version = "1.0"
 repositories {
     mavenCentral()
     mavenLocal()
+    maven("https://packages.jetbrains.team/maven/p/kds/kotlin-ds-maven")
 }
 
 dependencies {
@@ -19,7 +20,8 @@ dependencies {
     implementation("org.jgrapht:jgrapht-core:1.5.1")
     implementation("org.jetbrains.kotlinx:dataframe:0.13.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
-    implementation("org.jetbrains.kotlinx:kandy-lets-plot:0.8.0-dev-59")
+    implementation("org.jetbrains.kotlinx:kandy-lets-plot:0.8.0")
+    implementation("org.jetbrains.kotlinx:kotlin-statistics-jvm:0.4.0")
 
     testImplementation(kotlin("test"))
 }

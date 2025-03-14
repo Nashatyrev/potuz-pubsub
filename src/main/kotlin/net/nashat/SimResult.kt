@@ -28,10 +28,15 @@ data class ResultDerived(
 )
 
 @DataSchema
+interface ConfigableResultEntry {
+    val config: SimConfig
+}
+
+@DataSchema
 data class ResultEntry(
-    val config: SimConfig,
+    override val config: SimConfig,
     val result: DataFrame<CoreResult>
-)
+) : ConfigableResultEntry
 
 @DataSchema
 data class ResultEx(
@@ -41,13 +46,13 @@ data class ResultEx(
 
 @DataSchema
 data class ResultEntryEx(
-    val config: SimConfig,
+    override val config: SimConfig,
     val result: DataFrame<ResultEx>
-)
+) : ConfigableResultEntry
 
 @DataSchema
 data class ResultEntryExploded(
-    val config: SimConfig,
+    override val config: SimConfig,
     val result: ResultEx
-)
+) : ConfigableResultEntry
 
