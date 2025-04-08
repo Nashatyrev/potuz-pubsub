@@ -23,6 +23,8 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kandy-lets-plot:0.8.0")
     implementation("org.jetbrains.kotlinx:kotlin-statistics-jvm:0.4.0")
 
+    implementation("net.nashat:ideal-pubsub:1.0")
+
     testImplementation(kotlin("test"))
 }
 
