@@ -101,7 +101,6 @@ fun mainTest() {
 
 class PotuzSimulation(
     val config: PotuzSimulationConfig,
-    val withChunkDistribution: Boolean = false,
     val logEveryRound: Boolean = false
 ) {
 
@@ -111,6 +110,7 @@ class PotuzSimulation(
     val rnd = Random(config.simConfig.randomSeed)
 
     private val simConfig get() = config.simConfig
+    private val withChunkDistribution get() = config.withChunkDistribution
 
     init {
         setFieldPrime(config.pPrime)
@@ -305,17 +305,17 @@ class PotuzSimulation(
         fun runAll(
             configs: List<SimConfig>, withChunkDistribution: Boolean = false
         ): DataFrame<ResultEntry> =
-            runAllExt(configs.map { PotuzSimulationConfig(it) }, withChunkDistribution)
+            runAllExt(configs.map { PotuzSimulationConfig(it, withChunkDistribution = withChunkDistribution) })
 
         fun runAllExt(
-            configs: List<PotuzSimulationConfig>, withChunkDistribution: Boolean = false
+            configs: List<PotuzSimulationConfig>
         ): DataFrame<ResultEntry> {
             val readyCounter = AtomicInteger()
             val results = configs
-                .parallelStream()
+//                .parallelStream()
                 .map { config ->
                     val res = try {
-                        PotuzSimulation(config, withChunkDistribution = withChunkDistribution).run()
+                        PotuzSimulation(config).run()
                     } catch (e: Exception) {
                         System.err.println("Error for config: $config")
                         throw e

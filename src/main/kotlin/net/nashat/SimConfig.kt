@@ -74,10 +74,12 @@ data class SimConfig(
     val rsChunkSelectionStrategy: ChunkSelectionStrategy = ChunkSelectionStrategy.PreferLater,
     val rsMeshStrategy: MeshStrategy = MeshStrategy.Static,
     val peerSelectionStrategy: PeerSelectionStrategy = PeerSelectionStrategy.LessOutboundThenInboundTraffic,
+    val filterByMaxCoefficient: String? = null, // = PRIME_RISTRETTO,
     val randomSeed: Long = 0,
 ) {
 
-    fun withOptimalMeshStrategy() = this.copy(rsMeshStrategy =
+    fun withOptimalMeshStrategy() = this.copy(
+        rsMeshStrategy =
         if (erasure == Erasure.NoErasure) MeshStrategy.TwoPhaseMesh
         else MeshStrategy.Static
     )
@@ -90,11 +92,14 @@ data class PotuzSimulationConfig(
     val messageBufferSize: Int = UNLIMITED_RECEIVE_BUFFER,
     val maxRoundReceiveMessageCnt: Int = 1,
     val pPrime: String = PRIME_2_IN_8_PLUS_1,
+    val maxMultiplier: Long = pPrimeToMaxMultiplier(pPrime),
+    val withChunkDistribution: Boolean = false
 ) {
-    @Transient
-    val maxMultiplier = try {
-        pPrime.toLong() - 1
-    } catch (e: Exception) {
-        Int.MAX_VALUE.toLong()
+    companion object {
+        private fun pPrimeToMaxMultiplier(pPrime: String) = try {
+            pPrime.toLong() - 1
+        } catch (e: Exception) {
+            Int.MAX_VALUE.toLong()
+        }
     }
 }

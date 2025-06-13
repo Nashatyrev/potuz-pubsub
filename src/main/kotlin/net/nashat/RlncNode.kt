@@ -4,8 +4,22 @@ import kotlin.random.Random
 
 var origVectorIdGenerator = 0
 
-
 class RlncNode(index: Int, rnd: Random, config: PotuzSimulationConfig) : AbstractNode(index, rnd, config) {
+
+    val maxThreshold = config.simConfig.filterByMaxCoefficient?.let {
+        pFieldFactory[it]
+    }
+    private val vectorFilter: (CoefVector) -> Boolean = { coefVector ->
+        if (maxThreshold != null) {
+            val rc = coefVector.vec.all { it <= maxThreshold }
+            if (!rc) {
+                println("!!!")
+            }
+            rc
+        } else {
+            true
+        }
+    }
 
     override fun handleRecovered() {}
     override fun makePublisher() {
@@ -31,10 +45,12 @@ class RlncNode(index: Int, rnd: Random, config: PotuzSimulationConfig) : Abstrac
             }
 
             else -> // generate a random linear combination of existing chunks
-                currentMartix.coefVectors.fold(
-                    CoefVector.zero(simConfig.numberOfChunks),
-                    { v1, v2 -> v1 + v2 * rnd.nextLong(config.maxMultiplier) }
-                )
+                currentMartix.coefVectors
+                    .filter(vectorFilter)
+                    .fold(
+                        CoefVector.zero(simConfig.numberOfChunks),
+                        { v1, v2 -> v1 + v2 * rnd.nextLong(config.maxMultiplier) }
+                    )
         }
         val receivePeer: AbstractNode = peers
             .shuffled(rnd)

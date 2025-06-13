@@ -6,6 +6,7 @@ import org.jlinalg.field_p.FieldP
 import org.jlinalg.field_p.FieldPFactoryMap
 import kotlin.random.Random
 
+const val PRIME_RISTRETTO = "57896044618658097711785492504343953926634992332820282019728792003956564819949" // 2^255 - 19
 const val PRIME_2_IN_63_PLUS_O = "9223372036854775837"
 const val PRIME_2_IN_16_PLUS_1 = 65537.toString()
 const val PRIME_2_IN_8_PLUS_1 = 257.toString()
