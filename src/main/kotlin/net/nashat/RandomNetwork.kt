@@ -9,6 +9,7 @@ import org.jgrapht.*
 import org.jgrapht.generate.*
 import org.jgrapht.graph.builder.*
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.random.asJavaRandom
 
 class RandomNetwork(
     val connections: Map<Int, Set<Int>>
@@ -53,7 +54,7 @@ class RandomNetworkGenerator(
 //        generateConnections()
 //        generateUndirectedGraph(totalNodeCount, peerCount)
         if (peerCount == totalNodeCount - 1) generateAllToAll()
-        else generateUndirectedGraphJGraphT(totalNodeCount, peerCount)
+        else generateUndirectedGraphJGraphT(totalNodeCount, peerCount, rnd)
     )
 
     private fun generateAllToAll(): Map<Int, Set<Int>> {
@@ -176,7 +177,7 @@ class RandomNetworkGenerator(
          * @param degree The degree for each node (number of connections).
          * @return A map where each key is a node (Int) and the value is a set of neighboring nodes.
          */
-        fun generateUndirectedGraphJGraphT(nodeCount: Int, degree: Int): Map<Int, Set<Int>> {
+        fun generateUndirectedGraphJGraphT(nodeCount: Int, degree: Int, rnd: Random): Map<Int, Set<Int>> {
             require(degree < nodeCount) { "Degree must be less than the number of nodes to avoid self-loops." }
             require(nodeCount * degree % 2 == 0) { "The product of nodeCount and degree must be even." }
 
@@ -196,7 +197,7 @@ class RandomNetworkGenerator(
 //            }
 
             // Create and use the random regular graph generator.
-            val generator = RandomRegularGraphGenerator<Int, DefaultEdge>(nodeCount, degree)
+            val generator = RandomRegularGraphGenerator<Int, DefaultEdge>(nodeCount, degree, rnd.asJavaRandom())
             generator.generateGraph(graph)
 
             // Convert the graph to a Map<Int, Set<Int>> representation.
