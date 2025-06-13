@@ -27,8 +27,11 @@ abstract class AbstractNode(
         val sentRound: Int,
     )
 
+    data class CoefsAndDescriptor(val coefs: CoefVector, val descriptor: CoefVectorDescriptor)
+
     var currentMartix = CoefMatrix.EMPTY
     var coefDescriptors = mutableListOf<CoefVectorDescriptor>()
+    val coefsAndDescriptors get() = coefDescriptors.map { CoefsAndDescriptor(it.coefs, it) }
     val receivedMessages = mutableListOf<ReceivedMessage>()
     val receivedMessagesByPeer =
         mutableMapOf<AbstractNode, MutableList<ReceivedMessage>>()
@@ -39,6 +42,7 @@ abstract class AbstractNode(
     val inboundMessageBuffer = ArrayDeque<BufferedMessage>()
 
     protected val simConfig get() = config.simConfig
+
 
     abstract fun makePublisher();
     abstract fun handleRecovered();

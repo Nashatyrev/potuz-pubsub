@@ -2,6 +2,7 @@ package net.nashat.tests
 
 import net.nashat.Erasure
 import net.nashat.IOBuffer
+import net.nashat.PRIME_RISTRETTO
 import net.nashat.PotuzIO
 import net.nashat.PotuzSimulation
 import net.nashat.PotuzSimulationConfig
@@ -83,4 +84,22 @@ class PotuzDataFrameTest {
         assert(ioBuffer0.content == ioBuffer1.content)
     }
 
+    @Test
+    fun `sanity check`() {
+        val cfg0 = PotuzSimulationConfig(
+            SimConfig(
+                nodeCount = 1000,
+                peerCount = 50,
+                numberOfChunks = 32,
+                erasure = Erasure.RLNC,
+                filterByMaxCoefficient = null,
+                limitMaxHops = null
+            )
+        )
+
+        val res: DataFrame<ResultEntry> = PotuzSimulation.runAllExt(listOf(cfg0))
+
+        assert(res.rowsCount() == 1)
+        assert(res[0].result.rowsCount() == 69)
+    }
 }

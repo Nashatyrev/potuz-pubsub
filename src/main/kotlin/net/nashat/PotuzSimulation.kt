@@ -312,7 +312,7 @@ class PotuzSimulation(
         ): DataFrame<ResultEntry> {
             val readyCounter = AtomicInteger()
             val results = configs
-//                .parallelStream()
+                .parallelStream()
                 .map { config ->
                     val res = try {
                         PotuzSimulation(config).run()

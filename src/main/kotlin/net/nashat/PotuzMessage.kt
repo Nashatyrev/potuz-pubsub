@@ -7,7 +7,11 @@ data class PotuzMessage(
     val to: AbstractNode
 )
 
-data class CoefVectorDescriptor(val coefs: CoefVector, val sourceVectors: List<CoefVectorDescriptor>, val originalVectorId: Int?) {
+data class CoefVectorDescriptor(
+    val coefs: CoefVector,
+    val sourceVectors: List<CoefVectorDescriptor>,
+    val originalVectorId: Int?
+) {
     val isOriginal = sourceVectors.isEmpty()
 
     fun getAllOriginalVectorsRecursively(): List<CoefVectorDescriptor> {
@@ -26,12 +30,20 @@ data class CoefVectorDescriptor(val coefs: CoefVector, val sourceVectors: List<C
         }
     }
 
+    val treeDepth: Int by lazy {
+        if (isOriginal) {
+            1
+        } else {
+            1 + sourceVectors.maxOf { it.treeDepth }
+        }
+    }
+
     val originalVectors get() = getAllOriginalVectorsRecursively().map { it.coefs }.distinct()
     val originalVectorsCount get() = originalVectors.size
     val originalVectorIds get() = getAllOriginalVectorsRecursively().map { it.originalVectorId!! }.toSet()
 
     override fun toString(): String {
-        return if(isOriginal) "$originalVectorId" else "(" + sourceVectors.joinToString { it.toString() } + ")"
+        return if (isOriginal) "$originalVectorId" else "(" + sourceVectors.joinToString { it.toString() } + ")"
     }
 
 }

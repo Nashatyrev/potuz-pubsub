@@ -1,6 +1,5 @@
 package net.nashat
 
-import kotlinx.serialization.Transient
 import org.jetbrains.kotlinx.dataframe.annotations.DataSchema
 
 const val UNLIMITED_RECEIVE_BUFFER = 1_000_000
@@ -75,6 +74,7 @@ data class SimConfig(
     val rsMeshStrategy: MeshStrategy = MeshStrategy.Static,
     val peerSelectionStrategy: PeerSelectionStrategy = PeerSelectionStrategy.LessOutboundThenInboundTraffic,
     val filterByMaxCoefficient: String? = null, // = PRIME_RISTRETTO,
+    val limitMaxHops: Int? = null,
     val randomSeed: Long = 0,
 ) {
 
